@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { BinType, CatalogTable, CatalogVariable, Frame, FrameType } from '../types'
 import { BIN_LABELS, FRAME_LABELS, VALID_BINS } from '../lib/geo'
+import mapcLogo from '../assets/mapc-logo.svg'
 
 export interface FrameOption {
   id: number
@@ -418,11 +419,36 @@ export default function Sidebar({
       )}
 
       <div className="sidebar-footer">
-        Data:{' '}
-        <a href="https://datacommon.mapc.org/" target="_blank" rel="noreferrer">
-          MAPC DataCommon
-        </a>{' '}
-        · Prototype
+        <div className="footer-logos">
+          <a
+            className="mapc-chip"
+            href="https://www.mapc.org/"
+            target="_blank"
+            rel="noreferrer"
+            title="Metropolitan Area Planning Council"
+          >
+            <img src={mapcLogo} alt="MAPC" />
+          </a>
+          <a
+            className="dc-wordmark"
+            href="https://datacommon.mapc.org/"
+            target="_blank"
+            rel="noreferrer"
+            title="MAPC DataCommon"
+          >
+            DataCommon
+          </a>
+        </div>
+        <div>
+          <a
+            href="https://github.com/SLarrick/datacommon-webmaps"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub ↗
+          </a>{' '}
+          · Prototype
+        </div>
       </div>
     </aside>
   )

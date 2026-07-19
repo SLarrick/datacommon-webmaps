@@ -17,6 +17,18 @@
   border-bottom: 3px solid var(--teal);
 }
 
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.header-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+}
+
 .header h1 {
   margin: 0;
   font-size: 17px;
@@ -310,10 +322,50 @@
   margin-top: auto;
   font-size: 11px;
   color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .sidebar-footer a {
   color: var(--teal);
+}
+
+.footer-logos {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.footer-logos img {
+  height: 22px;
+  display: block;
+}
+
+/* The official MAPC logo is white — give it its brand-dark backing. */
+.mapc-chip {
+  display: block;
+  background: var(--navy);
+  padding: 6px 9px;
+  border-radius: 6px;
+}
+
+.mapc-chip:hover {
+  background: var(--navy-dark);
+}
+
+.dc-wordmark {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--navy) !important;
+  text-decoration: none;
+}
+
+.dc-wordmark:hover {
+  color: var(--teal) !important;
 }
 
 /* ---------- Map overlays ---------- */

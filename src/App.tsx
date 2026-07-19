@@ -351,9 +351,12 @@ export default function App() {
     <div className={`app${embed ? ' app-embed' : ''}`}>
       {!embed && (
         <header className="header">
-          <div>
-            <h1>MAPC DataCommon Web Maps</h1>
-            <p>An interactive choropleth for every DataCommon dataset · Prototype</p>
+          <div className="header-brand">
+            <img src="/favicon.svg" alt="" className="header-mark" />
+            <div>
+              <h1>MAPC DataCommon Web Maps</h1>
+              <p>An interactive choropleth for every DataCommon dataset · Prototype</p>
+            </div>
           </div>
           <a className="header-link" href="https://datacommon.mapc.org/" target="_blank" rel="noreferrer">
             DataCommon ↗
