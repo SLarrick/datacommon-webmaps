@@ -275,6 +275,17 @@ export default function App() {
     }
   }, [visibleUnits, values])
 
+  // Municipal boundary lines stay visible above tract choropleths for orientation.
+  const overlayData = useMemo<FeatureCollection | null>(() => {
+    if (bin !== 'ct' || !munis) return null
+    const features = munis.features.filter((f) => {
+      if (frame.type === 'muni') return Number(f.properties.muni_id) === frame.id
+      if (frame.type === 'subreg') return Number(f.properties.subreg_id) === frame.id
+      return true
+    })
+    return { type: 'FeatureCollection', features } as FeatureCollection
+  }, [bin, frame, munis])
+
   const subregionOptions = useMemo<FrameOption[]>(
     () =>
       (subregions?.features ?? [])
@@ -355,6 +366,7 @@ export default function App() {
         <main className={`map-area${showRankPanel ? ' rank-open' : ''}`}>
           <MapView
             data={displayData}
+            overlay={overlayData}
             classification={classification}
             variableLabel={variableEntry?.alias ?? null}
             yearLabel={yearLabel}

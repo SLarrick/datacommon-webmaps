@@ -109,6 +109,17 @@ async function main() {
     WHERE table_schema = 'metadata'`)
   const metaTables = new Set(metaTablesRes.rows.map((r) => r.table_name))
 
+  // The DataCommon browser's own registry: topic (menu1), subtopic (menu2),
+  // display name (menu3), and source, keyed by table name.
+  const browserRes = await query('ds', `
+    SELECT table_name, menu1, menu2, menu3, source, active
+    FROM tabular._data_browser WHERE db_name = 'ds'`)
+  const browserByTable = new Map()
+  for (const r of browserRes.rows) {
+    const prev = browserByTable.get(r.table_name)
+    if (!prev || (r.active === 'Y' && prev.active !== 'Y')) browserByTable.set(r.table_name, r)
+  }
+
   console.log('3/4 Auditing each table (metadata + cardinality)…')
   let done = 0
   const entries = await mapConcurrent(tableNames, async (table) => {
@@ -149,10 +160,14 @@ async function main() {
           }
         : null
 
+    const browser = browserByTable.get(table) ?? null
     const entry = {
       table,
       level,
       sibling: null, // filled in below
+      topic: browser?.menu1 ?? null,
+      subtopic: browser?.menu2 ?? null,
+      source: browser?.source ?? null,
       title: header.title || header.alt_title || table,
       altTitle: header.alt_title || null,
       description: header.descriptn || header.description || null,

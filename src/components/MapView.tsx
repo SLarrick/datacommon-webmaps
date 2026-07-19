@@ -20,6 +20,8 @@ interface HoverInfo {
 interface Props {
   /** Display features carrying __id/__name/__sub/__value/__hasData props. */
   data: FeatureCollection | null
+  /** Reference boundaries drawn as lines above the choropleth (e.g. munis over tracts). */
+  overlay: FeatureCollection | null
   classification: Classification | null
   variableLabel: string | null
   yearLabel: string | null
@@ -45,6 +47,7 @@ function fillColorExpression(classification: Classification | null): unknown {
 
 export default function MapView({
   data,
+  overlay,
   classification,
   variableLabel,
   yearLabel,
@@ -95,6 +98,16 @@ export default function MapView({
           'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 2.5, 0.7],
         },
       })
+      map.addSource('overlay', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      })
+      map.addLayer({
+        id: 'overlay-line',
+        type: 'line',
+        source: 'overlay',
+        paint: { 'line-color': '#3d4f5a', 'line-width': 1.4, 'line-opacity': 0.8 },
+      })
       setMapReady(true)
     })
     mapRef.current = map
@@ -116,6 +129,13 @@ export default function MapView({
     const source = map.getSource('units') as maplibregl.GeoJSONSource
     source.setData(data)
   }, [data, mapReady])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const source = map.getSource('overlay') as maplibregl.GeoJSONSource
+    source.setData(overlay ?? { type: 'FeatureCollection', features: [] })
+  }, [overlay, mapReady])
 
   // Re-fit when the frame/bin extent changes.
   useEffect(() => {

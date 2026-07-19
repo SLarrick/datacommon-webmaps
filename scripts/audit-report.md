@@ -1,6 +1,6 @@
 # DataCommon table audit (municipal + census tract)
 
-Generated: 2026-07-19T01:46:30.700Z
+Generated: 2026-07-19T02:21:55.610Z
 
 - Municipal (`_m`): **137 of 168** eligible; 120 of those carry pre-computed subregion rows
 - Census tract (`_ct`): **121 of 134** eligible

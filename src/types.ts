@@ -20,6 +20,9 @@ export interface CatalogTable {
   table: string
   level: Level
   sibling: string | null
+  topic: string | null
+  subtopic: string | null
+  source: string | null
   title: string
   altTitle: string | null
   description: string | null

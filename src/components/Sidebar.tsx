@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import type { BinType, CatalogTable, Frame, FrameType } from '../types'
+import type { BinType, CatalogTable, CatalogVariable, Frame, FrameType } from '../types'
 import { BIN_LABELS, FRAME_LABELS, VALID_BINS } from '../lib/geo'
 
 export interface FrameOption {
@@ -41,16 +41,25 @@ function TablePicker({
   const [filter, setFilter] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const matches = useMemo(() => {
+  const grouped = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    if (!q) return tables
-    return tables.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.table.toLowerCase().includes(q) ||
-        (t.altTitle ?? '').toLowerCase().includes(q),
-    )
+    const matches = !q
+      ? tables
+      : tables.filter((t) =>
+          [t.title, t.table, t.altTitle, t.topic, t.subtopic, t.source]
+            .filter(Boolean)
+            .some((s) => String(s).toLowerCase().includes(q)),
+        )
+    const byTopic = new Map<string, CatalogTable[]>()
+    for (const t of matches) {
+      const topic = t.topic ?? 'Other'
+      if (!byTopic.has(topic)) byTopic.set(topic, [])
+      byTopic.get(topic)!.push(t)
+    }
+    return [...byTopic.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [tables, filter])
+
+  const flatMatches = useMemo(() => grouped.flatMap(([, ts]) => ts), [grouped])
 
   const choose = (table: string) => {
     onSelect(table)
@@ -64,7 +73,7 @@ function TablePicker({
       <input
         ref={inputRef}
         type="text"
-        placeholder={selected ? selected.title : 'Search datasets…'}
+        placeholder={selected ? selected.title : 'Search datasets, topics, sources…'}
         className={selected && !open ? 'has-selection' : ''}
         value={open ? filter : selected ? selected.title : ''}
         onFocus={() => {
@@ -74,25 +83,104 @@ function TablePicker({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onChange={(e) => setFilter(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && matches.length > 0) choose(matches[0].table)
+          if (e.key === 'Enter' && flatMatches.length > 0) choose(flatMatches[0].table)
           if (e.key === 'Escape') inputRef.current?.blur()
         }}
       />
       {open && (
         <div className="table-picker-list">
-          {matches.length === 0 && <div className="table-picker-empty">No matching datasets</div>}
-          {matches.map((t) => (
+          {flatMatches.length === 0 && <div className="table-picker-empty">No matching datasets</div>}
+          {grouped.map(([topic, ts]) => (
+            <div key={topic}>
+              <div className="picker-group-header">{topic}</div>
+              {ts.map((t) => (
+                <button
+                  key={t.table}
+                  type="button"
+                  className={`table-picker-item${selected?.table === t.table ? ' is-selected' : ''}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    choose(t.table)
+                  }}
+                >
+                  <span className="item-title">{t.title}</span>
+                  <span className="item-table">
+                    {t.subtopic ? `${t.subtopic} · ` : ''}
+                    {t.table}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VariablePicker({
+  variables,
+  selected,
+  onSelect,
+}: {
+  variables: CatalogVariable[]
+  selected: string | null
+  onSelect: (name: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [filter, setFilter] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const selectedVar = variables.find((v) => v.name === selected) ?? null
+  const matches = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    if (!q) return variables
+    return variables.filter(
+      (v) => v.alias.toLowerCase().includes(q) || v.name.toLowerCase().includes(q),
+    )
+  }, [variables, filter])
+
+  const choose = (name: string) => {
+    onSelect(name)
+    setOpen(false)
+    setFilter('')
+    inputRef.current?.blur()
+  }
+
+  return (
+    <div className="table-picker">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder={selectedVar ? selectedVar.alias : 'Search variables…'}
+        className={selectedVar && !open ? 'has-selection' : ''}
+        value={open ? filter : (selectedVar?.alias ?? '')}
+        onFocus={() => {
+          setOpen(true)
+          setFilter('')
+        }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={(e) => setFilter(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && matches.length > 0) choose(matches[0].name)
+          if (e.key === 'Escape') inputRef.current?.blur()
+        }}
+      />
+      {open && (
+        <div className="table-picker-list">
+          {matches.length === 0 && <div className="table-picker-empty">No matching variables</div>}
+          {matches.map((v) => (
             <button
-              key={t.table}
+              key={v.name}
               type="button"
-              className={`table-picker-item${selected?.table === t.table ? ' is-selected' : ''}`}
+              className={`table-picker-item${selected === v.name ? ' is-selected' : ''}`}
               onMouseDown={(e) => {
                 e.preventDefault()
-                choose(t.table)
+                choose(v.name)
               }}
             >
-              <span className="item-title">{t.title}</span>
-              <span className="item-table">{t.table}</span>
+              <span className="item-title">{v.alias}</span>
+              <span className="item-table">{v.name}</span>
             </button>
           ))}
         </div>
@@ -214,14 +302,14 @@ export default function Sidebar({
       {selected && (
         <>
           <div className="control-group">
-            <label>Variable</label>
-            <select value={variable ?? ''} onChange={(e) => onSelectVariable(e.target.value)}>
-              {selected.variables.map((v) => (
-                <option key={v.name} value={v.name}>
-                  {v.alias}
-                </option>
-              ))}
-            </select>
+            <label>
+              Variable <span className="count-badge">{selected.variables.length}</span>
+            </label>
+            <VariablePicker
+              variables={selected.variables}
+              selected={variable}
+              onSelect={onSelectVariable}
+            />
             {selected.yearCol && selected.years.length > 0 && (
               <>
                 <label>Year</label>
@@ -246,7 +334,22 @@ export default function Sidebar({
             <div className="dataset-info-title">{selected.title}</div>
             {selected.description && <p>{selected.description}</p>}
             <dl>
-              {selected.universe && (
+              {selected.topic && (
+                <>
+                  <dt>Topic</dt>
+                  <dd>
+                    {selected.topic}
+                    {selected.subtopic ? ` › ${selected.subtopic}` : ''}
+                  </dd>
+                </>
+              )}
+              {selected.source && (
+                <>
+                  <dt>Source</dt>
+                  <dd>{selected.source}</dd>
+                </>
+              )}
+              {selected.universe && selected.universe !== 'n/a' && (
                 <>
                   <dt>Universe</dt>
                   <dd>{selected.universe}</dd>

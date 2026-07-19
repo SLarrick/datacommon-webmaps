@@ -22,7 +22,9 @@ export interface Classification {
 
 function pickColors(ramp: string[], n: number): string[] {
   if (n >= ramp.length) return ramp
-  if (n <= 1) return [ramp[ramp.length - 1]]
+  // A truly single-class map (all values equal) reads best as a mid-tone,
+  // not the extreme end of the ramp.
+  if (n <= 1) return [ramp[Math.floor(ramp.length / 2)]]
   return Array.from({ length: n }, (_, i) => ramp[Math.round((i * (ramp.length - 1)) / (n - 1))])
 }
 
@@ -81,6 +83,14 @@ export function classify(
     for (let i = 1; i < k; i++) rawBreaks.push(quantile(sorted, i / k))
     // Skewed distributions can produce duplicate quantile breaks — collapse them.
     breaks = dedupe(rawBreaks).filter((b) => b > min && b <= max)
+    // Zero-inflated data (most values at the minimum) can collapse every
+    // quantile break — fall back to equal intervals so variation still shows.
+    if (breaks.length < 2 && max > min) {
+      const step = (max - min) / k
+      breaks = dedupe(Array.from({ length: k - 1 }, (_, i) => min + step * (i + 1))).filter(
+        (b) => b > min && b <= max,
+      )
+    }
     colors = pickColors(SEQUENTIAL, breaks.length + 1)
   }
 
