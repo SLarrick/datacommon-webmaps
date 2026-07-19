@@ -3,8 +3,9 @@ import type { Classification } from '../lib/classify'
 import { NO_DATA_COLOR, formatValue } from '../lib/classify'
 
 export interface RankRow {
-  muniId: number
+  id: string
   name: string
+  sublabel: string | null
   value: number | null
   rank: number | null
   color: string
@@ -16,8 +17,8 @@ interface Props {
   variableLabel: string
   yearLabel: string | null
   isAcs: boolean
-  hoveredMuniId: number | null
-  onHoverMuni: (id: number | null) => void
+  hoveredId: string | null
+  onHover: (id: string | null) => void
   onClose: () => void
 }
 
@@ -27,22 +28,22 @@ export default function RankingPanel({
   variableLabel,
   yearLabel,
   isAcs,
-  hoveredMuniId,
-  onHoverMuni,
+  hoveredId,
+  onHover,
   onClose,
 }: Props) {
-  const rowRefs = useRef(new Map<number, HTMLDivElement>())
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
 
   // When the map drives the hover, keep the matching row in view.
   useEffect(() => {
-    if (hoveredMuniId === null) return
-    rowRefs.current.get(hoveredMuniId)?.scrollIntoView({ block: 'nearest' })
-  }, [hoveredMuniId])
+    if (hoveredId === null) return
+    rowRefs.current.get(hoveredId)?.scrollIntoView({ block: 'nearest' })
+  }, [hoveredId])
 
   const maxAbs = Math.max(Math.abs(classification.min), Math.abs(classification.max)) || 1
 
   return (
-    <div className="rank-panel" onMouseLeave={() => onHoverMuni(null)}>
+    <div className="rank-panel" onMouseLeave={() => onHover(null)}>
       <div className="rank-header">
         <div className="rank-title">
           Rankings
@@ -58,17 +59,20 @@ export default function RankingPanel({
       <div className="rank-list">
         {rows.map((r) => (
           <div
-            key={r.muniId}
+            key={r.id}
             ref={(el) => {
-              if (el) rowRefs.current.set(r.muniId, el)
-              else rowRefs.current.delete(r.muniId)
+              if (el) rowRefs.current.set(r.id, el)
+              else rowRefs.current.delete(r.id)
             }}
-            className={`rank-row${hoveredMuniId === r.muniId ? ' is-hovered' : ''}${r.value === null ? ' is-nodata' : ''}`}
-            onMouseEnter={() => onHoverMuni(r.muniId)}
+            className={`rank-row${hoveredId === r.id ? ' is-hovered' : ''}${r.value === null ? ' is-nodata' : ''}`}
+            onMouseEnter={() => onHover(r.id)}
           >
             <span className="rank-num">{r.rank ?? '—'}</span>
             <span className="rank-chip" style={{ background: r.color }} />
-            <span className="rank-name">{r.name}</span>
+            <span className="rank-name">
+              {r.name}
+              {r.sublabel && <span className="rank-sub"> · {r.sublabel}</span>}
+            </span>
             <span className="rank-value">
               {r.value === null ? 'No data' : formatValue(r.value, classification)}
             </span>
@@ -94,18 +98,18 @@ export default function RankingPanel({
 }
 
 export function buildRankRows(
-  features: { muniId: number; name: string }[],
-  values: Map<number, number | null>,
+  units: { id: string; name: string; sublabel: string | null }[],
+  values: Map<string, number | null>,
   classification: Classification,
 ): RankRow[] {
   const withValue: RankRow[] = []
   const noData: RankRow[] = []
-  for (const f of features) {
-    const value = values.get(f.muniId) ?? null
+  for (const u of units) {
+    const value = values.get(u.id) ?? null
     if (value === null) {
-      noData.push({ muniId: f.muniId, name: f.name, value: null, rank: null, color: NO_DATA_COLOR })
+      noData.push({ ...u, value: null, rank: null, color: NO_DATA_COLOR })
     } else {
-      withValue.push({ muniId: f.muniId, name: f.name, value, rank: null, color: '' })
+      withValue.push({ ...u, value, rank: null, color: '' })
     }
   }
   withValue.sort((a, b) => (b.value as number) - (a.value as number))

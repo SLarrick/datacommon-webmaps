@@ -1,21 +1,24 @@
-import type { CatalogTable, DataRow, MuniCollection } from '../types'
+import type { BinType, CatalogTable, DataRow, VisibleUnit } from '../types'
+import { BIN_LABELS } from './geo'
 
 /**
- * Build a GeoJSON of the current view: MAPC municipal polygons with the
+ * Build a GeoJSON of the current view: visible bin-unit polygons with the
  * selected table's row (all columns, selected year) merged into properties.
  */
 export function downloadCurrentView(
-  boundaries: MuniCollection,
-  rowsByMuni: Map<number, DataRow>,
+  units: VisibleUnit[],
+  rowsById: Map<string, DataRow>,
   tableEntry: CatalogTable,
   year: string | null,
+  bin: BinType,
+  frameLabel: string,
 ): void {
-  const features = boundaries.features.map((f) => {
-    const row = rowsByMuni.get(Number(f.properties.muni_id))
+  const features = units.map((u) => {
+    const row = rowsById.get(u.id)
     return {
       type: 'Feature' as const,
-      properties: { ...f.properties, ...(row ?? {}) },
-      geometry: f.geometry,
+      properties: { ...u.feature.properties, ...(row ?? {}) },
+      geometry: u.feature.geometry,
     }
   })
   const fc = {
@@ -26,8 +29,8 @@ export function downloadCurrentView(
       table: tableEntry.table,
       title: tableEntry.title,
       year: year ?? undefined,
-      frame: 'MAPC region',
-      bin: 'Municipality',
+      frame: frameLabel,
+      bin: BIN_LABELS[bin],
       generatedBy: 'MAPC DataCommon Web Maps (prototype)',
     },
     features,
@@ -35,7 +38,7 @@ export function downloadCurrentView(
   const blob = new Blob([JSON.stringify(fc)], { type: 'application/geo+json' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `${tableEntry.table}${year ? `_${year}` : ''}_mapc_munis.geojson`
+  a.download = `${tableEntry.table}${year ? `_${year}` : ''}_${bin}.geojson`
   a.click()
   URL.revokeObjectURL(a.href)
 }

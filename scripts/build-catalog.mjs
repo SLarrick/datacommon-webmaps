@@ -1,22 +1,25 @@
 /**
- * build-catalog.mjs
+ * build-catalog.mjs (v2)
  *
  * Introspects the MAPC DataCommon API and generates:
  *   - public/data/catalog.json  (the app's table catalog)
  *   - scripts/audit-report.md   (human-readable eligibility audit)
  *
- * Phase 1 scope: municipal tables only (tabular.*_m).
+ * Covers municipal (`_m`) and census-tract (`_ct`) tables.
  *
- * Eligibility rules (Phase 1):
- *   - table has a muni_id column
- *   - table has >= 1 numeric variable column (excluding IDs and the year column)
- *   - exactly one row per municipality per year (no subgroup breakdowns)
+ * Eligibility rules:
+ *   - `_m`: has muni_id column; >=1 numeric variable; one row per muni(-year)
+ *   - `_ct`: has a tract join column (ct10_id / ct20_id / geoid); >=1 numeric
+ *     variable; one row per tract(-year)
+ *
+ * Also records, per `_m` table, whether pre-computed subregion rows exist
+ * (muni_id 355–362), and pairs sibling tables that exist at both levels.
  *
  * Usage: node scripts/build-catalog.mjs
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -24,8 +27,6 @@ const API = 'https://datacommon.mapc.org/api/'
 const TOKEN = 'datacommon'
 const CONCURRENCY = 5
 
-// Metadata rows with these names are table-level header fields; everything
-// else in a metadata table is assumed to describe a column.
 const HEADER_KEYS = new Set([
   'join_key', 'title', 'alt_title', 'tbl_table', 'tbl_num', 'geography',
   'descriptn', 'description', 'datesavail', 'coverage', 'universe', 'creator',
@@ -37,10 +38,8 @@ const NUMERIC_TYPES = new Set([
   'int2', 'int4', 'int8', 'float4', 'float8', 'numeric', 'money',
 ])
 
-// Columns that are identifiers/bookkeeping, never variables.
-const ID_COLUMNS = new Set(['seq_id', 'muni_id', 'objectid', 'gid', 'id', 'logrecno'])
+const ID_COLUMNS = new Set(['seq_id', 'muni_id', 'objectid', 'gid', 'id', 'logrecno', 'geoid'])
 
-// Year-column candidates, highest priority first.
 const YEAR_EXACT = ['cal_year', 'acs_year', 'fy', 'year', 'years', 'yr', 'survey_year', 'report_year', 'school_year']
 
 async function query(db, sql, attempt = 0) {
@@ -82,10 +81,12 @@ function pickYearColumn(columns) {
 }
 
 async function main() {
-  console.log('1/4 Listing municipal tables…')
+  console.log('1/4 Listing municipal + tract tables…')
   const tablesRes = await query('ds', `
     SELECT table_name FROM information_schema.tables
-    WHERE table_schema = 'tabular' AND right(table_name, 2) = '_m'
+    WHERE table_schema = 'tabular'
+      AND (right(table_name, 2) = '_m' OR right(table_name, 3) = '_ct')
+      AND left(table_name, 1) <> '_'
     ORDER BY table_name`)
   const tableNames = tablesRes.rows.map((r) => r.table_name)
   console.log(`   ${tableNames.length} tables`)
@@ -94,7 +95,8 @@ async function main() {
   const colsRes = await query('ds', `
     SELECT table_name, column_name, udt_name, ordinal_position
     FROM information_schema.columns
-    WHERE table_schema = 'tabular' AND right(table_name, 2) = '_m'
+    WHERE table_schema = 'tabular'
+      AND (right(table_name, 2) = '_m' OR right(table_name, 3) = '_ct')
     ORDER BY table_name, ordinal_position`)
   const columnsByTable = new Map()
   for (const r of colsRes.rows) {
@@ -110,11 +112,11 @@ async function main() {
   console.log('3/4 Auditing each table (metadata + cardinality)…')
   let done = 0
   const entries = await mapConcurrent(tableNames, async (table) => {
+    const level = table.endsWith('_ct') ? 'ct' : 'muni'
     const columns = columnsByTable.get(table) ?? []
     const colNames = new Set(columns.map((c) => c.name))
     const reasons = []
 
-    // --- metadata ---
     const header = {}
     const aliases = new Map()
     if (metaTables.has(table)) {
@@ -138,8 +140,19 @@ async function main() {
       .filter((c) => !/geoid|geo_id|fips/i.test(`${c.name} ${aliases.get(c.name) ?? ''}`))
       .map((c) => ({ name: c.name, alias: aliases.get(c.name) ?? c.name, type: c.type }))
 
+    const joinCols =
+      level === 'ct'
+        ? {
+            ct10: colNames.has('ct10_id') ? 'ct10_id' : null,
+            ct20: colNames.has('ct20_id') ? 'ct20_id' : null,
+            geoid: colNames.has('geoid') ? 'geoid' : null,
+          }
+        : null
+
     const entry = {
       table,
+      level,
+      sibling: null, // filled in below
       title: header.title || header.alt_title || table,
       altTitle: header.alt_title || null,
       description: header.descriptn || header.description || null,
@@ -147,19 +160,29 @@ async function main() {
       datesAvail: header.datesavail || null,
       universe: header.universe || null,
       joinKey: header.join_key || (colNames.has('muni_id') ? 'muni_id' : null),
+      joinCols,
       yearCol,
       years: [],
       nRows: null,
-      nMunis: null,
-      maxRowsPerMuniYear: null,
+      nUnits: null,
+      maxRowsPerUnitYear: null,
+      hasSubregionRows: false,
       variables,
       eligible: false,
       reasons,
     }
 
-    // --- hard requirements before touching data ---
-    if (!colNames.has('muni_id')) {
-      entry.reasons.push('no muni_id column')
+    const unitCol =
+      level === 'muni'
+        ? colNames.has('muni_id')
+          ? 'muni_id'
+          : null
+        : ['ct20_id', 'ct10_id', 'geoid'].filter((c) => colNames.has(c)).length > 0
+          ? `COALESCE(${['ct20_id', 'ct10_id', 'geoid'].filter((c) => colNames.has(c)).join(', ')})`
+          : null
+
+    if (!unitCol) {
+      entry.reasons.push(level === 'muni' ? 'no muni_id column' : 'no tract join column (ct10_id/ct20_id/geoid)')
       return entry
     }
     if (variables.length === 0) {
@@ -167,31 +190,36 @@ async function main() {
       return entry
     }
 
-    // --- cardinality + years, one stats query per table ---
     try {
-      const groupCols = yearCol ? `muni_id, ${yearCol}` : 'muni_id'
+      const groupCols = yearCol ? `${unitCol}, ${yearCol}` : unitCol
       const yearsSel = yearCol
         ? `(SELECT string_agg(DISTINCT ${yearCol}::text, '|') FROM tabular.${table})`
         : `NULL`
+      const subregSel =
+        level === 'muni'
+          ? `(SELECT count(*) FROM tabular.${table} WHERE muni_id BETWEEN 355 AND 362)`
+          : `0`
       const stats = await query('ds', `
         SELECT
           (SELECT count(*) FROM tabular.${table}) AS n_rows,
-          (SELECT count(DISTINCT muni_id) FROM tabular.${table}) AS n_munis,
+          (SELECT count(DISTINCT ${unitCol}) FROM tabular.${table}) AS n_units,
           (SELECT max(c) FROM (SELECT count(*) AS c FROM tabular.${table} GROUP BY ${groupCols}) g) AS max_per,
-          ${yearsSel} AS years`)
+          ${yearsSel} AS years,
+          ${subregSel} AS subreg_rows`)
       const s = stats.rows[0]
       entry.nRows = Number(s.n_rows)
-      entry.nMunis = Number(s.n_munis)
-      entry.maxRowsPerMuniYear = Number(s.max_per)
+      entry.nUnits = Number(s.n_units)
+      entry.maxRowsPerUnitYear = Number(s.max_per)
+      entry.hasSubregionRows = Number(s.subreg_rows) > 0
       entry.years = s.years
         ? [...new Set(String(s.years).split('|'))].sort((a, b) => String(a).localeCompare(String(b)))
         : []
 
-      if (entry.maxRowsPerMuniYear > 1) {
+      if (entry.maxRowsPerUnitYear > 1) {
         entry.reasons.push(
           yearCol
-            ? `multiple rows per municipality-year (max ${entry.maxRowsPerMuniYear}) — subgroup breakdowns not supported in Phase 1`
-            : `multiple rows per municipality (max ${entry.maxRowsPerMuniYear}) and no year column detected`,
+            ? `multiple rows per unit-year (max ${entry.maxRowsPerUnitYear}) — subgroup breakdowns not supported`
+            : `multiple rows per unit (max ${entry.maxRowsPerUnitYear}) and no year column detected`,
         )
       } else {
         entry.eligible = true
@@ -201,18 +229,40 @@ async function main() {
     }
 
     done += 1
-    if (done % 20 === 0) console.log(`   …${done}/${tableNames.length}`)
+    if (done % 25 === 0) console.log(`   …${done}/${tableNames.length}`)
     return entry
   })
 
+  // Sibling pairing: same base name at both levels, both eligible.
+  const byBase = new Map()
+  for (const e of entries) {
+    const base = e.table.replace(/_(m|ct)$/, '')
+    if (!byBase.has(base)) byBase.set(base, {})
+    byBase.get(base)[e.level] = e
+  }
+  for (const pair of byBase.values()) {
+    if (pair.muni?.eligible && pair.ct?.eligible) {
+      pair.muni.sibling = pair.ct.table
+      pair.ct.sibling = pair.muni.table
+    }
+  }
+
   console.log('4/4 Writing outputs…')
   const eligible = entries.filter((e) => e.eligible)
+  const muniEligible = eligible.filter((e) => e.level === 'muni')
+  const ctEligible = eligible.filter((e) => e.level === 'ct')
   const catalog = {
     generatedAt: new Date().toISOString(),
     source: API,
-    phase: 1,
-    totalMunicipalTables: entries.length,
-    eligibleCount: eligible.length,
+    phase: 2,
+    totals: {
+      muni: entries.filter((e) => e.level === 'muni').length,
+      ct: entries.filter((e) => e.level === 'ct').length,
+      muniEligible: muniEligible.length,
+      ctEligible: ctEligible.length,
+      withSubregionRows: muniEligible.filter((e) => e.hasSubregionRows).length,
+      siblingPairs: eligible.filter((e) => e.sibling).length / 2,
+    },
     tables: entries,
   }
   mkdirSync(join(ROOT, 'public/data'), { recursive: true })
@@ -225,11 +275,13 @@ async function main() {
     byReason.get(key).push(e.table)
   }
   const report = [
-    '# DataCommon municipal table audit',
+    '# DataCommon table audit (municipal + census tract)',
     '',
     `Generated: ${catalog.generatedAt}`,
     '',
-    `**${eligible.length} of ${entries.length}** municipal (\`_m\`) tables are eligible for Phase 1 choropleths.`,
+    `- Municipal (\`_m\`): **${muniEligible.length} of ${catalog.totals.muni}** eligible; ${catalog.totals.withSubregionRows} of those carry pre-computed subregion rows`,
+    `- Census tract (\`_ct\`): **${ctEligible.length} of ${catalog.totals.ct}** eligible`,
+    `- Sibling pairs (same dataset at both levels): ${catalog.totals.siblingPairs}`,
     '',
     '## Ineligible tables by reason',
     '',
@@ -237,13 +289,12 @@ async function main() {
       `### ${reason} (${tables.length})\n\n${tables.map((t) => `- \`${t}\``).join('\n')}\n`),
     '## Eligible tables',
     '',
-    ...eligible.map((e) => `- \`${e.table}\` — ${e.title} (${e.variables.length} vars, years: ${e.years.length ? `${e.years[0]}…${e.years[e.years.length - 1]}` : 'single'})`),
+    ...eligible.map((e) =>
+      `- \`${e.table}\` — ${e.title} (${e.variables.length} vars${e.level === 'muni' && e.hasSubregionRows ? ', subregion rows' : ''}${e.sibling ? `, sibling: \`${e.sibling}\`` : ''})`),
   ].join('\n')
   writeFileSync(join(ROOT, 'scripts/audit-report.md'), report)
 
-  console.log(`\nDone. ${eligible.length}/${entries.length} tables eligible.`)
-  console.log('  public/data/catalog.json')
-  console.log('  scripts/audit-report.md')
+  console.log(`\nDone. Municipal ${muniEligible.length}/${catalog.totals.muni}, tract ${ctEligible.length}/${catalog.totals.ct} eligible.`)
 }
 
 main().catch((err) => {

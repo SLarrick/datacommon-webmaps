@@ -1,13 +1,27 @@
 import { useMemo, useRef, useState } from 'react'
-import type { CatalogTable } from '../types'
+import type { BinType, CatalogTable, Frame, FrameType } from '../types'
+import { BIN_LABELS, FRAME_LABELS, VALID_BINS } from '../lib/geo'
+
+export interface FrameOption {
+  id: number
+  name: string
+}
 
 interface Props {
+  frame: Frame
+  bin: BinType
+  subregionOptions: FrameOption[]
+  muniOptions: FrameOption[]
   tables: CatalogTable[]
   selected: CatalogTable | null
   variable: string | null
   year: string | null
   loading: boolean
   canDownload: boolean
+  /** bins that no eligible table can serve under the current frame */
+  binAvailability: Record<BinType, boolean>
+  onFrameChange: (frame: Frame) => void
+  onBinChange: (bin: BinType) => void
   onSelectTable: (table: string | null) => void
   onSelectVariable: (variable: string) => void
   onSelectYear: (year: string) => void
@@ -88,12 +102,19 @@ function TablePicker({
 }
 
 export default function Sidebar({
+  frame,
+  bin,
+  subregionOptions,
+  muniOptions,
   tables,
   selected,
   variable,
   year,
   loading,
   canDownload,
+  binAvailability,
+  onFrameChange,
+  onBinChange,
   onSelectTable,
   onSelectVariable,
   onSelectYear,
@@ -111,18 +132,76 @@ export default function Sidebar({
     }
   }
 
+  const validBins = VALID_BINS[frame.type]
+
   return (
     <aside className="sidebar">
       <div className="control-group">
         <label>Geographic frame</label>
-        <select disabled value="mapc" title="More frames coming in Phase 2">
-          <option value="mapc">MAPC Region</option>
+        <select
+          value={frame.type}
+          onChange={(e) => {
+            const type = e.target.value as FrameType
+            if (type === 'mapc') onFrameChange({ type, id: null })
+            else if (type === 'subreg') onFrameChange({ type, id: subregionOptions[0]?.id ?? null })
+            else onFrameChange({ type, id: muniOptions[0]?.id ?? null })
+          }}
+        >
+          {(['mapc', 'subreg', 'muni'] as FrameType[]).map((t) => (
+            <option key={t} value={t}>
+              {FRAME_LABELS[t]}
+            </option>
+          ))}
         </select>
+        {frame.type === 'subreg' && (
+          <select
+            value={frame.id ?? ''}
+            onChange={(e) => onFrameChange({ type: 'subreg', id: Number(e.target.value) })}
+          >
+            {subregionOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {frame.type === 'muni' && (
+          <select
+            value={frame.id ?? ''}
+            onChange={(e) => onFrameChange({ type: 'muni', id: Number(e.target.value) })}
+          >
+            {muniOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        )}
+
         <label>Binning unit</label>
-        <select disabled value="muni" title="More bin units coming in Phase 2">
-          <option value="muni">Municipality</option>
+        <select value={bin} onChange={(e) => onBinChange(e.target.value as BinType)}>
+          {(['subreg', 'muni', 'ct'] as BinType[]).map((b) => {
+            const nests = validBins.includes(b)
+            const hasTables = binAvailability[b]
+            return (
+              <option
+                key={b}
+                value={b}
+                disabled={!nests || !hasTables}
+                title={
+                  !nests
+                    ? 'This unit does not nest below the selected frame'
+                    : !hasTables
+                      ? 'No datasets available at this level'
+                      : undefined
+                }
+              >
+                {BIN_LABELS[b]}
+                {!nests ? ' (not below frame)' : ''}
+              </option>
+            )
+          })}
         </select>
-        <div className="phase-note">Frame &amp; bin are fixed in this prototype phase.</div>
       </div>
 
       <div className="control-group">
@@ -156,6 +235,12 @@ export default function Sidebar({
               </>
             )}
           </div>
+
+          {bin === 'subreg' && (
+            <div className="phase-note">
+              Subregion values are MAPC's pre-computed aggregates from this dataset.
+            </div>
+          )}
 
           <div className="dataset-info">
             <div className="dataset-info-title">{selected.title}</div>
@@ -193,7 +278,7 @@ export default function Sidebar({
 
       {!selected && (
         <div className="empty-hint">
-          Select a dataset above to map it across the 101 municipalities of the MAPC region.
+          Select a dataset above to map it across the current frame and bin unit.
         </div>
       )}
 

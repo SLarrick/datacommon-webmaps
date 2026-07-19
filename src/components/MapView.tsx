@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
-import type { Polygon } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import type { FeatureCollection } from 'geojson'
 import type { Classification } from '../lib/classify'
 import { NO_DATA_COLOR, formatValue } from '../lib/classify'
-import type { MuniCollection } from '../types'
 
 const BASEMAP = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 const NEUTRAL_FILL = '#c9d6d3'
@@ -13,21 +12,21 @@ interface HoverInfo {
   x: number
   y: number
   name: string
-  subregion: string | null
+  sublabel: string | null
   value: number | null
   hasData: boolean
 }
 
 interface Props {
-  boundaries: MuniCollection | null
-  /** muni_id → value (null = table selected but no data for this muni) */
-  values: Map<number, number | null> | null
+  /** Display features carrying __id/__name/__sub/__value/__hasData props. */
+  data: FeatureCollection | null
   classification: Classification | null
   variableLabel: string | null
   yearLabel: string | null
-  /** Shared hover state — may be driven by the map or the rankings panel. */
-  hoveredMuniId: number | null
-  onHoverMuni: (id: number | null) => void
+  /** Changing this string re-fits the map to the data extent. */
+  fitKey: string
+  hoveredId: string | null
+  onHover: (id: string | null) => void
 }
 
 function fillColorExpression(classification: Classification | null): unknown {
@@ -45,19 +44,20 @@ function fillColorExpression(classification: Classification | null): unknown {
 }
 
 export default function MapView({
-  boundaries,
-  values,
+  data,
   classification,
   variableLabel,
   yearLabel,
-  hoveredMuniId,
-  onHoverMuni,
+  fitKey,
+  hoveredId,
+  onHover,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [hover, setHover] = useState<HoverInfo | null>(null)
-  const prevHoverRef = useRef<number | null>(null)
+  const prevHoverRef = useRef<string | null>(null)
+  const lastFitRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -70,21 +70,21 @@ export default function MapView({
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     map.on('load', () => {
-      map.addSource('munis', {
+      map.addSource('units', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
-        promoteId: 'muni_id',
+        promoteId: '__id',
       })
       map.addLayer({
-        id: 'munis-fill',
+        id: 'units-fill',
         type: 'fill',
-        source: 'munis',
+        source: 'units',
         paint: { 'fill-color': NEUTRAL_FILL, 'fill-opacity': 0.82 },
       })
       map.addLayer({
-        id: 'munis-line',
+        id: 'units-line',
         type: 'line',
-        source: 'munis',
+        source: 'units',
         paint: {
           'line-color': [
             'case',
@@ -109,63 +109,54 @@ export default function MapView({
     }
   }, [])
 
-  // Push data (boundaries + joined values) into the source.
+  // Push display data into the source.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !mapReady || !boundaries) return
-    const features = boundaries.features.map((f) => {
-      const raw = values?.get(Number(f.properties.muni_id))
-      const hasData = raw != null && Number.isFinite(raw)
-      return {
-        ...f,
-        properties: {
-          ...f.properties,
-          __value: hasData ? raw : 0,
-          __hasData: values ? (hasData ? 1 : 0) : -1, // -1 = no table selected
-        },
-      }
-    })
-    const source = map.getSource('munis') as maplibregl.GeoJSONSource
-    source.setData({ type: 'FeatureCollection', features })
-  }, [boundaries, values, mapReady])
+    if (!map || !mapReady || !data) return
+    const source = map.getSource('units') as maplibregl.GeoJSONSource
+    source.setData(data)
+  }, [data, mapReady])
 
-  // Fit to MAPC region once boundaries arrive.
+  // Re-fit when the frame/bin extent changes.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !boundaries || boundaries.features.length === 0) return
+    if (!map || !mapReady || !data || data.features.length === 0) return
+    if (lastFitRef.current === fitKey) return
+    lastFitRef.current = fitKey
     const bounds = new maplibregl.LngLatBounds()
-    for (const f of boundaries.features) {
-      const walk = (coords: unknown): void => {
-        if (typeof (coords as number[])[0] === 'number') {
-          bounds.extend(coords as [number, number])
-        } else {
-          for (const c of coords as unknown[]) walk(c)
-        }
+    const walk = (coords: unknown): void => {
+      if (typeof (coords as number[])[0] === 'number') {
+        bounds.extend(coords as [number, number])
+      } else {
+        for (const c of coords as unknown[]) walk(c)
       }
-      walk((f.geometry as Polygon).coordinates)
+    }
+    for (const f of data.features) {
+      const coords = (f.geometry as { coordinates?: unknown } | null)?.coordinates
+      if (coords) walk(coords)
     }
     map.fitBounds(bounds, { padding: 30, animate: false })
-  }, [boundaries, mapReady])
+  }, [data, fitKey, mapReady])
 
   // Restyle fills when classification changes.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
-    map.setPaintProperty('munis-fill', 'fill-color', fillColorExpression(classification) as never)
+    map.setPaintProperty('units-fill', 'fill-color', fillColorExpression(classification) as never)
   }, [classification, mapReady])
 
   // The shared hover id (map- or panel-driven) controls the outline highlight.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
-    if (prevHoverRef.current !== null && prevHoverRef.current !== hoveredMuniId) {
-      map.setFeatureState({ source: 'munis', id: prevHoverRef.current }, { hover: false })
+    if (prevHoverRef.current !== null && prevHoverRef.current !== hoveredId) {
+      map.setFeatureState({ source: 'units', id: prevHoverRef.current }, { hover: false })
     }
-    if (hoveredMuniId !== null) {
-      map.setFeatureState({ source: 'munis', id: hoveredMuniId }, { hover: true })
+    if (hoveredId !== null) {
+      map.setFeatureState({ source: 'units', id: hoveredId }, { hover: true })
     }
-    prevHoverRef.current = hoveredMuniId
-  }, [hoveredMuniId, mapReady])
+    prevHoverRef.current = hoveredId
+  }, [hoveredId, mapReady])
 
   // Mouse interactions on the map itself (tooltip stays map-local).
   useEffect(() => {
@@ -174,42 +165,39 @@ export default function MapView({
     const onMove = (e: maplibregl.MapLayerMouseEvent) => {
       const f = e.features?.[0]
       if (!f) return
-      onHoverMuni(Number(f.properties.muni_id))
+      onHover(String(f.properties.__id))
       map.getCanvas().style.cursor = 'pointer'
       setHover({
         x: e.point.x,
         y: e.point.y,
-        name: String(f.properties.municipal),
-        subregion: f.properties.subrg_abbr ? String(f.properties.subrg_abbr) : null,
+        name: String(f.properties.__name),
+        sublabel: f.properties.__sub ? String(f.properties.__sub) : null,
         value: f.properties.__hasData === 1 ? Number(f.properties.__value) : null,
         hasData: f.properties.__hasData === 1,
       })
     }
     const onLeave = () => {
-      onHoverMuni(null)
+      onHover(null)
       map.getCanvas().style.cursor = ''
       setHover(null)
     }
-    map.on('mousemove', 'munis-fill', onMove)
-    map.on('mouseleave', 'munis-fill', onLeave)
+    map.on('mousemove', 'units-fill', onMove)
+    map.on('mouseleave', 'units-fill', onLeave)
     return () => {
-      map.off('mousemove', 'munis-fill', onMove)
-      map.off('mouseleave', 'munis-fill', onLeave)
+      map.off('mousemove', 'units-fill', onMove)
+      map.off('mouseleave', 'units-fill', onLeave)
     }
-  }, [mapReady, onHoverMuni])
+  }, [mapReady, onHover])
 
-  const showValueRow = values !== null
+  const showValueRow = classification !== null
 
   return (
     <div className="map-wrap" ref={containerRef}>
       {hover && (
-        <div
-          className="map-tooltip"
-          style={{ left: hover.x + 12, top: hover.y + 12 }}
-        >
+        <div className="map-tooltip" style={{ left: hover.x + 12, top: hover.y + 12 }}>
           <div className="tooltip-name">
             {hover.name}
-            {hover.subregion && <span className="tooltip-subregion"> · {hover.subregion}</span>}
+            {hover.sublabel && <span className="tooltip-subregion"> · {hover.sublabel}</span>}
           </div>
           {showValueRow && (
             <div className="tooltip-value">
