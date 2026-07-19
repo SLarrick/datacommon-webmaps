@@ -103,6 +103,28 @@ export function classIndex(value: number, breaks: number[]): number {
   return i
 }
 
+export interface LegendRow {
+  color: string
+  label: string
+}
+
+/** The legend's class rows — shared by the on-map legend and PNG export. */
+export function legendRows(c: Classification): LegendRow[] {
+  const rows = c.colors.map((color, i) => {
+    const lo = i === 0 ? c.min : c.breaks[i - 1]
+    const hi = i === c.colors.length - 1 ? c.max : c.breaks[i]
+    const flo = formatValue(lo, c)
+    const fhi = formatValue(hi, c)
+    // Degenerate classes ("12 – 12") read better as a single value.
+    const label = c.colors.length === 1 || flo === fhi ? flo : `${flo} – ${fhi}`
+    return { color, label }
+  })
+  if (c.noDataCount > 0) {
+    rows.push({ color: NO_DATA_COLOR, label: `No data (${c.noDataCount})` })
+  }
+  return rows
+}
+
 export function formatValue(value: number, c: Pick<Classification, 'percent' | 'fraction'> | null): string {
   if (!Number.isFinite(value)) return '—'
   const display = c?.fraction ? value * 100 : value

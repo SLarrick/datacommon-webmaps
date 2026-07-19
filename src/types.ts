@@ -23,6 +23,7 @@ export interface CatalogTable {
   topic: string | null
   subtopic: string | null
   source: string | null
+  datasetId: number | null
   title: string
   altTitle: string | null
   description: string | null

@@ -26,6 +26,8 @@ interface Props {
   onSelectVariable: (variable: string) => void
   onSelectYear: (year: string) => void
   onDownload: () => void
+  onExportPng: () => void
+  canExportPng: boolean
 }
 
 function TablePicker({
@@ -207,17 +209,25 @@ export default function Sidebar({
   onSelectVariable,
   onSelectYear,
   onDownload,
+  onExportPng,
+  canExportPng,
 }: Props) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'link' | 'embed' | null>(null)
 
-  const copyLink = async () => {
+  const copyText = async (kind: 'link' | 'embed', text: string) => {
     try {
-      await navigator.clipboard.writeText(window.location.href)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
+      await navigator.clipboard.writeText(text)
+      setCopied(kind)
+      setTimeout(() => setCopied(null), 1600)
     } catch {
       /* clipboard unavailable — URL bar still works */
     }
+  }
+
+  const embedSnippet = () => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('embed', '1')
+    return `<iframe src="${url.toString()}" width="100%" height="520" style="border:1px solid #dde4e6;border-radius:8px" loading="lazy" title="MAPC DataCommon Web Map"></iframe>`
   }
 
   const validBins = VALID_BINS[frame.type]
@@ -366,14 +376,36 @@ export default function Sidebar({
                 <code>{selected.table}</code>
               </dd>
             </dl>
+            {selected.datasetId && (
+              <a
+                className="datacommon-link"
+                href={`https://datacommon.mapc.org/browser/datasets/${selected.datasetId}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on DataCommon ↗
+              </a>
+            )}
           </div>
 
           <div className="control-group actions">
             <button type="button" className="btn btn-primary" onClick={onDownload} disabled={!canDownload || loading}>
               {loading ? 'Loading data…' : 'Download GeoJSON (current view)'}
             </button>
-            <button type="button" className="btn" onClick={copyLink}>
-              {copied ? 'Link copied ✓' : 'Copy link to this map'}
+            <button type="button" className="btn" onClick={onExportPng} disabled={!canExportPng || loading}>
+              Download map image (PNG)
+            </button>
+            <a
+              className="btn btn-anchor"
+              href={`https://datacommon.mapc.org/api/export?token=datacommon&database=ds&schema=tabular&table=${selected.table}&format=csv`}
+            >
+              Download full table (CSV)
+            </a>
+            <button type="button" className="btn" onClick={() => copyText('link', window.location.href)}>
+              {copied === 'link' ? 'Link copied ✓' : 'Copy link to this map'}
+            </button>
+            <button type="button" className="btn" onClick={() => copyText('embed', embedSnippet())}>
+              {copied === 'embed' ? 'Embed code copied ✓' : 'Copy embed code'}
             </button>
           </div>
         </>

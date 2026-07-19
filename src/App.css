@@ -589,6 +589,52 @@
   border-top: 1px solid var(--border);
 }
 
+/* ---------- Embed mode + share ---------- */
+
+.app-embed .main {
+  height: 100%;
+}
+
+.embed-credit {
+  position: absolute;
+  z-index: 10;
+  top: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--navy);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(31, 58, 77, 0.12);
+}
+
+.embed-credit:hover {
+  color: var(--teal);
+  border-color: var(--teal);
+}
+
+.btn-anchor {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
+.datacommon-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--teal);
+  text-decoration: none;
+}
+
+.datacommon-link:hover {
+  text-decoration: underline;
+}
+
 /* ---------- Small screens (tablet floor) ---------- */
 
 @media (max-width: 900px) {

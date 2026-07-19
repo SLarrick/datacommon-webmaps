@@ -8,7 +8,9 @@ import RankingPanel, { buildRankRows } from './components/RankingPanel'
 import { dcQuery, sqlLiteral } from './lib/api'
 import { classify } from './lib/classify'
 import { downloadCurrentView } from './lib/download'
+import { exportMapPng } from './lib/exportPng'
 import {
+  BIN_LABELS,
   FRAME_LABELS,
   VALID_BINS,
   getVisibleUnits,
@@ -55,6 +57,8 @@ function normalizeSelection(sel: Selection, catalog: Catalog, bin: BinType): Sel
 
 export default function App() {
   const initial = useRef(readUrlState()).current
+  const embed = initial.embed
+  const mapCanvasRef = useRef<(() => HTMLCanvasElement | null) | null>(null)
 
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [munis, setMunis] = useState<UnitCollection | null>(null)
@@ -127,8 +131,8 @@ export default function App() {
   }, [bin, vintage, tracts2010, tracts2020])
 
   useEffect(() => {
-    writeUrlState(frame, bin, sel, rankOpen)
-  }, [frame, bin, sel, rankOpen])
+    writeUrlState(frame, bin, sel, rankOpen, embed)
+  }, [frame, bin, sel, rankOpen, embed])
 
   const onHover = useCallback((id: string | null) => setHoveredId(id), [])
 
@@ -325,18 +329,39 @@ export default function App() {
 
   const showRankPanel = rankOpen && !!(rankRows && classification && variableEntry)
 
+  const handleExportPng = () => {
+    const mapCanvas = mapCanvasRef.current?.()
+    if (!mapCanvas || !classification || !variableEntry || !tableEntry) return
+    exportMapPng({
+      mapCanvas,
+      title: variableEntry.alias,
+      subtitle: `${tableEntry.title} · ${frameLabel} · ${BIN_LABELS[bin]}${yearLabel ? ` · ${yearLabel}` : ''}`,
+      classification,
+      filename: `${tableEntry.table}${sel.year ? `_${sel.year}` : ''}_map.png`,
+    })
+  }
+
+  const fullViewUrl = () => {
+    const url = new URL(window.location.href)
+    url.searchParams.delete('embed')
+    return url.toString()
+  }
+
   return (
-    <div className="app">
-      <header className="header">
-        <div>
-          <h1>MAPC DataCommon Web Maps</h1>
-          <p>An interactive choropleth for every DataCommon dataset · Prototype</p>
-        </div>
-        <a className="header-link" href="https://datacommon.mapc.org/" target="_blank" rel="noreferrer">
-          DataCommon ↗
-        </a>
-      </header>
+    <div className={`app${embed ? ' app-embed' : ''}`}>
+      {!embed && (
+        <header className="header">
+          <div>
+            <h1>MAPC DataCommon Web Maps</h1>
+            <p>An interactive choropleth for every DataCommon dataset · Prototype</p>
+          </div>
+          <a className="header-link" href="https://datacommon.mapc.org/" target="_blank" rel="noreferrer">
+            DataCommon ↗
+          </a>
+        </header>
+      )}
       <div className="main">
+        {!embed && (
         <Sidebar
           frame={frame}
           bin={bin}
@@ -362,7 +387,10 @@ export default function App() {
               downloadCurrentView(visibleUnits, rowsById, tableEntry, sel.year, bin, frameLabel)
             }
           }}
+          onExportPng={handleExportPng}
+          canExportPng={!!classification}
         />
+        )}
         <main className={`map-area${showRankPanel ? ' rank-open' : ''}`}>
           <MapView
             data={displayData}
@@ -373,16 +401,22 @@ export default function App() {
             fitKey={fitKey}
             hoveredId={hoveredId}
             onHover={onHover}
+            canvasRef={mapCanvasRef}
           />
           <Legend
             classification={classification}
             title={variableEntry?.alias ?? null}
             yearLabel={yearLabel}
           />
-          {classification && variableEntry && !showRankPanel && (
+          {classification && variableEntry && !showRankPanel && !embed && (
             <button type="button" className="rank-toggle" onClick={() => setRankOpen(true)}>
               ☰ Rankings
             </button>
+          )}
+          {embed && (
+            <a className="embed-credit" href={fullViewUrl()} target="_blank" rel="noreferrer">
+              MAPC DataCommon Web Maps ↗
+            </a>
           )}
           {showRankPanel && rankRows && classification && variableEntry && (
             <RankingPanel

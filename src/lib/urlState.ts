@@ -5,6 +5,7 @@ export interface UrlState extends Selection {
   frame: Frame
   bin: BinType
   rankOpen: boolean
+  embed: boolean
 }
 
 function parseFrame(raw: string | null): Frame {
@@ -32,10 +33,17 @@ export function readUrlState(): UrlState {
     variable: p.get('var'),
     year: p.get('year'),
     rankOpen: p.get('rank') === '1',
+    embed: p.get('embed') === '1',
   }
 }
 
-export function writeUrlState(frame: Frame, bin: BinType, sel: Selection, rankOpen: boolean): void {
+export function writeUrlState(
+  frame: Frame,
+  bin: BinType,
+  sel: Selection,
+  rankOpen: boolean,
+  embed: boolean,
+): void {
   const p = new URLSearchParams()
   p.set('frame', serializeFrame(frame))
   p.set('bin', bin)
@@ -43,6 +51,7 @@ export function writeUrlState(frame: Frame, bin: BinType, sel: Selection, rankOp
   if (sel.variable) p.set('var', sel.variable)
   if (sel.year) p.set('year', sel.year)
   if (rankOpen) p.set('rank', '1')
+  if (embed) p.set('embed', '1')
   const next = `${window.location.pathname}?${p.toString()}`
   if (next !== `${window.location.pathname}${window.location.search}`) {
     window.history.replaceState(null, '', next)

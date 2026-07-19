@@ -112,7 +112,7 @@ async function main() {
   // The DataCommon browser's own registry: topic (menu1), subtopic (menu2),
   // display name (menu3), and source, keyed by table name.
   const browserRes = await query('ds', `
-    SELECT table_name, menu1, menu2, menu3, source, active
+    SELECT seq_id, table_name, menu1, menu2, menu3, source, active
     FROM tabular._data_browser WHERE db_name = 'ds'`)
   const browserByTable = new Map()
   for (const r of browserRes.rows) {
@@ -168,6 +168,7 @@ async function main() {
       topic: browser?.menu1 ?? null,
       subtopic: browser?.menu2 ?? null,
       source: browser?.source ?? null,
+      datasetId: browser?.seq_id ?? null,
       title: header.title || header.alt_title || table,
       altTitle: header.alt_title || null,
       description: header.descriptn || header.description || null,

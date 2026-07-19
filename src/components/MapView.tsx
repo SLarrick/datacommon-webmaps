@@ -29,6 +29,8 @@ interface Props {
   fitKey: string
   hoveredId: string | null
   onHover: (id: string | null) => void
+  /** Receives the live map canvas getter, for PNG export. */
+  canvasRef?: React.MutableRefObject<(() => HTMLCanvasElement | null) | null>
 }
 
 function fillColorExpression(classification: Classification | null): unknown {
@@ -54,6 +56,7 @@ export default function MapView({
   fitKey,
   hoveredId,
   onHover,
+  canvasRef,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -70,6 +73,8 @@ export default function MapView({
       center: [-71.06, 42.35],
       zoom: 8.3,
       attributionControl: { compact: true },
+      // Keeps the WebGL buffer readable for PNG export.
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     map.on('load', () => {
@@ -111,6 +116,7 @@ export default function MapView({
       setMapReady(true)
     })
     mapRef.current = map
+    if (canvasRef) canvasRef.current = () => mapRef.current?.getCanvas() ?? null
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__map = map
     // The flex layout can settle after map construction — keep canvas in sync.
     const ro = new ResizeObserver(() => map.resize())
