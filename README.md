@@ -2,7 +2,9 @@
 
 A prototype that generates a simple interactive **choropleth map for (nearly) every MAPC DataCommon dataset**, powered by the public [DataCommon API](https://datacommon.mapc.org/developers).
 
-**Phase 1 scope:** MAPC-region frame, municipality bins, municipal (`_m`) tables — with variable + year selection, hover tooltip, legend, shareable URLs, and GeoJSON download of the current view. See the PRD in the parent folder for the full product definition and later phases.
+**Current state (Phases 1–2 shipped):** frames (MAPC region / subregion / municipality), bins (subregion / municipality / census tract with 2010+2020 vintages), 258 eligible datasets grouped by DataCommon topics, searchable variable picker, rankings panel with map hover sync, tooltip, legend, shareable URLs, and GeoJSON download of the current view.
+
+Full product definition, verified API findings, and the build log: **[docs/PRD.md](docs/PRD.md)**.
 
 ## Quick start
 
