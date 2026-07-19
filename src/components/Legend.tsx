@@ -14,10 +14,10 @@ export default function Legend({ classification, title, yearLabel }: Props) {
   const rows = colors.map((color, i) => {
     const lo = i === 0 ? min : breaks[i - 1]
     const hi = i === colors.length - 1 ? max : breaks[i]
-    const label =
-      colors.length === 1
-        ? formatValue(min, classification)
-        : `${formatValue(lo, classification)} – ${formatValue(hi, classification)}`
+    const flo = formatValue(lo, classification)
+    const fhi = formatValue(hi, classification)
+    // Degenerate classes ("12 – 12") read better as a single value.
+    const label = colors.length === 1 || flo === fhi ? flo : `${flo} – ${fhi}`
     return { color, label }
   })
 

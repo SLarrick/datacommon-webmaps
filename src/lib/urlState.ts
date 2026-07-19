@@ -5,22 +5,28 @@ import type { Selection } from '../types'
 export const FRAME = 'mapc'
 export const BIN = 'muni'
 
-export function readUrlState(): Selection {
+export interface UrlState extends Selection {
+  rankOpen: boolean
+}
+
+export function readUrlState(): UrlState {
   const p = new URLSearchParams(window.location.search)
   return {
     table: p.get('table'),
     variable: p.get('var'),
     year: p.get('year'),
+    rankOpen: p.get('rank') === '1',
   }
 }
 
-export function writeUrlState(sel: Selection): void {
+export function writeUrlState(sel: Selection, rankOpen: boolean): void {
   const p = new URLSearchParams()
   p.set('frame', FRAME)
   p.set('bin', BIN)
   if (sel.table) p.set('table', sel.table)
   if (sel.variable) p.set('var', sel.variable)
   if (sel.year) p.set('year', sel.year)
+  if (rankOpen) p.set('rank', '1')
   const next = `${window.location.pathname}?${p.toString()}`
   if (next !== `${window.location.pathname}${window.location.search}`) {
     window.history.replaceState(null, '', next)

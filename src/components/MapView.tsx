@@ -25,23 +25,39 @@ interface Props {
   classification: Classification | null
   variableLabel: string | null
   yearLabel: string | null
+  /** Shared hover state — may be driven by the map or the rankings panel. */
+  hoveredMuniId: number | null
+  onHoverMuni: (id: number | null) => void
 }
 
 function fillColorExpression(classification: Classification | null): unknown {
   if (!classification) return NEUTRAL_FILL
-  const step: unknown[] = ['step', ['get', '__value'], classification.colors[0]]
-  classification.breaks.forEach((b, i) => {
-    step.push(b, classification.colors[i + 1])
-  })
-  return ['case', ['==', ['get', '__hasData'], 1], step, NO_DATA_COLOR]
+  // A 'step' expression needs at least one stop; a single class is a flat color.
+  let ramp: unknown = classification.colors[0]
+  if (classification.breaks.length > 0) {
+    const step: unknown[] = ['step', ['get', '__value'], classification.colors[0]]
+    classification.breaks.forEach((b, i) => {
+      step.push(b, classification.colors[i + 1])
+    })
+    ramp = step
+  }
+  return ['case', ['==', ['get', '__hasData'], 1], ramp, NO_DATA_COLOR]
 }
 
-export default function MapView({ boundaries, values, classification, variableLabel, yearLabel }: Props) {
+export default function MapView({
+  boundaries,
+  values,
+  classification,
+  variableLabel,
+  yearLabel,
+  hoveredMuniId,
+  onHoverMuni,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [hover, setHover] = useState<HoverInfo | null>(null)
-  const hoveredIdRef = useRef<number | null>(null)
+  const prevHoverRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -138,19 +154,27 @@ export default function MapView({ boundaries, values, classification, variableLa
     map.setPaintProperty('munis-fill', 'fill-color', fillColorExpression(classification) as never)
   }, [classification, mapReady])
 
-  // Hover interactions.
+  // The shared hover id (map- or panel-driven) controls the outline highlight.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    if (prevHoverRef.current !== null && prevHoverRef.current !== hoveredMuniId) {
+      map.setFeatureState({ source: 'munis', id: prevHoverRef.current }, { hover: false })
+    }
+    if (hoveredMuniId !== null) {
+      map.setFeatureState({ source: 'munis', id: hoveredMuniId }, { hover: true })
+    }
+    prevHoverRef.current = hoveredMuniId
+  }, [hoveredMuniId, mapReady])
+
+  // Mouse interactions on the map itself (tooltip stays map-local).
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     const onMove = (e: maplibregl.MapLayerMouseEvent) => {
       const f = e.features?.[0]
       if (!f) return
-      const id = Number(f.properties.muni_id)
-      if (hoveredIdRef.current !== null && hoveredIdRef.current !== id) {
-        map.setFeatureState({ source: 'munis', id: hoveredIdRef.current }, { hover: false })
-      }
-      map.setFeatureState({ source: 'munis', id }, { hover: true })
-      hoveredIdRef.current = id
+      onHoverMuni(Number(f.properties.muni_id))
       map.getCanvas().style.cursor = 'pointer'
       setHover({
         x: e.point.x,
@@ -162,10 +186,7 @@ export default function MapView({ boundaries, values, classification, variableLa
       })
     }
     const onLeave = () => {
-      if (hoveredIdRef.current !== null) {
-        map.setFeatureState({ source: 'munis', id: hoveredIdRef.current }, { hover: false })
-        hoveredIdRef.current = null
-      }
+      onHoverMuni(null)
       map.getCanvas().style.cursor = ''
       setHover(null)
     }
@@ -175,7 +196,7 @@ export default function MapView({ boundaries, values, classification, variableLa
       map.off('mousemove', 'munis-fill', onMove)
       map.off('mouseleave', 'munis-fill', onLeave)
     }
-  }, [mapReady])
+  }, [mapReady, onHoverMuni])
 
   const showValueRow = values !== null
 

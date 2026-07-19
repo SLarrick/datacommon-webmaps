@@ -417,6 +417,160 @@
   cursor: pointer;
 }
 
+/* ---------- Rankings panel ---------- */
+
+.rank-toggle {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  left: 12px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--navy);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(31, 58, 77, 0.12);
+}
+
+.rank-toggle:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.rank-panel {
+  position: absolute;
+  z-index: 12;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(31, 58, 77, 0.18);
+}
+
+/* Keep the legend visible when the panel is open. */
+.map-area.rank-open .legend {
+  right: 324px;
+}
+
+.rank-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rank-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--navy);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rank-subtitle {
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.rank-close {
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.rank-close:hover {
+  color: var(--navy);
+}
+
+.rank-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.rank-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.rank-row.is-hovered {
+  background: var(--teal-light);
+}
+
+.rank-row.is-nodata {
+  color: var(--text-muted);
+}
+
+.rank-num {
+  width: 24px;
+  flex-shrink: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.rank-chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.rank-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rank-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 1px;
+  height: 2px;
+  max-width: calc(100% - 24px);
+  border-radius: 1px;
+  opacity: 0.7;
+}
+
+.rank-footnote {
+  padding: 8px 12px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
 /* ---------- Small screens (tablet floor) ---------- */
 
 @media (max-width: 900px) {

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import MapView from './components/MapView'
 import Sidebar from './components/Sidebar'
 import Legend from './components/Legend'
+import RankingPanel, { buildRankRows } from './components/RankingPanel'
 import { dcQuery, sqlLiteral } from './lib/api'
 import { classify } from './lib/classify'
 import { downloadCurrentView } from './lib/download'
@@ -35,7 +36,12 @@ function normalizeSelection(sel: Selection, catalog: Catalog): Selection {
 export default function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [boundaries, setBoundaries] = useState<MuniCollection | null>(null)
-  const [sel, setSel] = useState<Selection>(() => readUrlState())
+  const [sel, setSel] = useState<Selection>(() => {
+    const { table, variable, year } = readUrlState()
+    return { table, variable, year }
+  })
+  const [rankOpen, setRankOpen] = useState<boolean>(() => readUrlState().rankOpen)
+  const [hoveredMuniId, setHoveredMuniId] = useState<number | null>(null)
   const [rows, setRows] = useState<DataRow[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,8 +79,10 @@ export default function App() {
   )
 
   useEffect(() => {
-    writeUrlState(sel)
-  }, [sel])
+    writeUrlState(sel, rankOpen)
+  }, [sel, rankOpen])
+
+  const onHoverMuni = useCallback((id: number | null) => setHoveredMuniId(id), [])
 
   // Fetch table rows whenever table or year changes (variable switches are free).
   useEffect(() => {
@@ -137,6 +145,17 @@ export default function App() {
 
   const yearLabel = tableEntry?.yearCol ? sel.year : null
 
+  const rankRows = useMemo(() => {
+    if (!values || !classification || !boundaries) return null
+    const features = boundaries.features.map((f) => ({
+      muniId: Number(f.properties.muni_id),
+      name: f.properties.municipal,
+    }))
+    return buildRankRows(features, values, classification)
+  }, [values, classification, boundaries])
+
+  const showRankPanel = rankOpen && !!(rankRows && classification && variableEntry)
+
   return (
     <div className="app">
       <header className="header">
@@ -165,19 +184,38 @@ export default function App() {
             if (boundaries && tableEntry) downloadCurrentView(boundaries, rowsByMuni, tableEntry, sel.year)
           }}
         />
-        <main className="map-area">
+        <main className={`map-area${showRankPanel ? ' rank-open' : ''}`}>
           <MapView
             boundaries={boundaries}
             values={values}
             classification={classification}
             variableLabel={variableEntry?.alias ?? null}
             yearLabel={yearLabel}
+            hoveredMuniId={hoveredMuniId}
+            onHoverMuni={onHoverMuni}
           />
           <Legend
             classification={classification}
             title={variableEntry?.alias ?? null}
             yearLabel={yearLabel}
           />
+          {classification && variableEntry && !showRankPanel && (
+            <button type="button" className="rank-toggle" onClick={() => setRankOpen(true)}>
+              ☰ Rankings
+            </button>
+          )}
+          {showRankPanel && rankRows && classification && variableEntry && (
+            <RankingPanel
+              rows={rankRows}
+              classification={classification}
+              variableLabel={variableEntry.alias}
+              yearLabel={yearLabel}
+              isAcs={!!tableEntry && tableEntry.table.includes('_acs_')}
+              hoveredMuniId={hoveredMuniId}
+              onHoverMuni={onHoverMuni}
+              onClose={() => setRankOpen(false)}
+            />
+          )}
           {loading && <div className="map-banner">Loading data…</div>}
           {error && <div className="map-banner map-banner-error">{error}</div>}
           {staleUrlNotice && (
