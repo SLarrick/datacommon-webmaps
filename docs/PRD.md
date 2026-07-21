@@ -84,7 +84,7 @@ One page. A choropleth of the **101 MAPC municipalities**, colored by a user-sel
 2. *As a planner, I switch variables and years and the map + legend update in under a second.*
 3. *As a planner, I hover over a municipality and see its name, the variable value, and the year.*
 4. *As a planner, I copy the URL and send it to a colleague, who sees the exact same map.*
-5. *As a GIS user, I download the current view as GeoJSON (municipal polygons + selected table's columns for the selected year) and open it in QGIS.*
+5. *As a GIS user, I download the current view as GeoJSON (municipal polygons + selected table's columns for the selected year) and open it in ArcGIS (or QGIS).*
 
 ### 5.3 UI layout
 
