@@ -41,6 +41,9 @@ export interface CatalogTable {
   variables: CatalogVariable[]
   eligible: boolean
   reasons: string[]
+  /** Preview dataset served from a static file, not yet published to DataCommon. */
+  local?: boolean
+  dataUrl?: string
 }
 
 export interface Catalog {
