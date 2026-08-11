@@ -1,0 +1,288 @@
+{
+ "generatedAt": "2026-08-11T19:02:26.720Z",
+ "note": "Preview datasets not yet published to DataCommon",
+ "tables": [
+  {
+   "level": "muni",
+   "sibling": "rental_listings_ct",
+   "topic": "Housing",
+   "subtopic": "Rental Listings",
+   "source": "MAPC Rental Listings Database",
+   "datasetId": null,
+   "altTitle": null,
+   "geography": null,
+   "universe": "Rental listings",
+   "datesAvail": "2026 Q2",
+   "joinKey": "muni_id",
+   "joinCols": null,
+   "yearCol": null,
+   "years": [],
+   "nRows": null,
+   "nUnits": 99,
+   "maxRowsPerUnitYear": 1,
+   "hasSubregionRows": false,
+   "variables": [
+    {
+     "name": "br0_medrent",
+     "alias": "Studio · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br1_medrent",
+     "alias": "1-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br2_medrent",
+     "alias": "2-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br3_medrent",
+     "alias": "3-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br4_medrent",
+     "alias": "4-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br5_medrent",
+     "alias": "5-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br6_medrent",
+     "alias": "6-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br0_meanrent",
+     "alias": "Studio · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br1_meanrent",
+     "alias": "1-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br2_meanrent",
+     "alias": "2-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br3_meanrent",
+     "alias": "3-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br4_meanrent",
+     "alias": "4-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br5_meanrent",
+     "alias": "5-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br6_meanrent",
+     "alias": "6-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br0_count",
+     "alias": "Studio · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br1_count",
+     "alias": "1-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br2_count",
+     "alias": "2-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br3_count",
+     "alias": "3-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br4_count",
+     "alias": "4-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br5_count",
+     "alias": "5-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br6_count",
+     "alias": "6-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "total_listings",
+     "alias": "Total listings (all bedroom sizes)",
+     "type": "int4"
+    }
+   ],
+   "eligible": true,
+   "reasons": [],
+   "local": true,
+   "table": "rental_listings_m",
+   "title": "Rental Listings Summary, 2026 Q2 (Municipal) — Preview",
+   "description": "Median and mean asking rents and listing counts by bedroom size, summarized from the MAPC rental listings database for 2026 Q2. Preview — not yet published to DataCommon. Small-sample medians (see listing counts) reflect very few listings.",
+   "dataUrl": "/data/local/rental_listings_m.json"
+  },
+  {
+   "level": "ct",
+   "sibling": "rental_listings_m",
+   "topic": "Housing",
+   "subtopic": "Rental Listings",
+   "source": "MAPC Rental Listings Database",
+   "datasetId": null,
+   "altTitle": null,
+   "geography": null,
+   "universe": "Rental listings",
+   "datesAvail": "2026 Q2",
+   "joinKey": "ct10_id",
+   "joinCols": {
+    "ct10": "ct10_id",
+    "ct20": null,
+    "geoid": null
+   },
+   "yearCol": null,
+   "years": [],
+   "nRows": null,
+   "nUnits": 659,
+   "maxRowsPerUnitYear": 1,
+   "hasSubregionRows": false,
+   "variables": [
+    {
+     "name": "br0_medrent",
+     "alias": "Studio · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br1_medrent",
+     "alias": "1-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br2_medrent",
+     "alias": "2-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br3_medrent",
+     "alias": "3-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br4_medrent",
+     "alias": "4-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br5_medrent",
+     "alias": "5-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br6_medrent",
+     "alias": "6-bedroom · Median rent",
+     "type": "int4"
+    },
+    {
+     "name": "br0_meanrent",
+     "alias": "Studio · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br1_meanrent",
+     "alias": "1-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br2_meanrent",
+     "alias": "2-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br3_meanrent",
+     "alias": "3-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br4_meanrent",
+     "alias": "4-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br5_meanrent",
+     "alias": "5-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br6_meanrent",
+     "alias": "6-bedroom · Mean rent",
+     "type": "int4"
+    },
+    {
+     "name": "br0_count",
+     "alias": "Studio · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br1_count",
+     "alias": "1-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br2_count",
+     "alias": "2-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br3_count",
+     "alias": "3-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br4_count",
+     "alias": "4-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br5_count",
+     "alias": "5-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "br6_count",
+     "alias": "6-bedroom · Listings count",
+     "type": "int4"
+    },
+    {
+     "name": "total_listings",
+     "alias": "Total listings (all bedroom sizes)",
+     "type": "int4"
+    }
+   ],
+   "eligible": true,
+   "reasons": [],
+   "local": true,
+   "table": "rental_listings_ct",
+   "title": "Rental Listings Summary, 2026 Q2 (Census Tracts) — Preview",
+   "description": "Median and mean asking rents and listing counts by bedroom size, summarized from the MAPC rental listings database for 2026 Q2 on 2010 census tracts. Preview — not yet published to DataCommon. Small-sample medians (see listing counts) reflect very few listings.",
+   "dataUrl": "/data/local/rental_listings_ct.json"
+  }
+ ]
+}

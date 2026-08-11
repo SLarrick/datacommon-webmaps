@@ -81,12 +81,16 @@ export default function App() {
   const [staleUrlNotice, setStaleUrlNotice] = useState(false)
 
   useEffect(() => {
-    fetch('/data/catalog.json')
-      .then((r) => r.json())
-      .then((c: Catalog) => {
-        setCatalog(c)
+    // Preview datasets (not yet in DataCommon) merge into the main catalog.
+    const localCatalog = fetch('/data/local/catalog.json')
+      .then((r) => (r.ok ? r.json() : { tables: [] }))
+      .catch(() => ({ tables: [] }))
+    Promise.all([fetch('/data/catalog.json').then((r) => r.json()), localCatalog])
+      .then(([c, local]: [Catalog, { tables: Catalog['tables'] }]) => {
+        const merged = { ...c, tables: [...c.tables, ...(local.tables ?? [])] }
+        setCatalog(merged)
         setSel((s) => {
-          const normalized = normalizeSelection(s, c, initial.bin)
+          const normalized = normalizeSelection(s, merged, initial.bin)
           if (s.table && !normalized.table) setStaleUrlNotice(true)
           return normalized
         })
@@ -201,8 +205,11 @@ export default function App() {
     setError(null)
     const where =
       tableEntry.yearCol && sel.year ? ` WHERE ${tableEntry.yearCol} = ${sqlLiteral(sel.year)}` : ''
-    dcQuery('ds', `SELECT * FROM tabular.${tableEntry.table}${where}`)
-      .then((res) => {
+    const fetchRows = tableEntry.local
+      ? fetch(tableEntry.dataUrl!).then((r) => r.json())
+      : dcQuery('ds', `SELECT * FROM tabular.${tableEntry.table}${where}`)
+    fetchRows
+      .then((res: { rows: DataRow[] }) => {
         if (cancelled) return
         setRows(res.rows)
         setLoading(false)

@@ -343,6 +343,9 @@ export default function Sidebar({
 
           <div className="dataset-info">
             <div className="dataset-info-title">{selected.title}</div>
+            {selected.local && (
+              <div className="preview-badge">Preview — not yet published to DataCommon</div>
+            )}
             {selected.description && <p>{selected.description}</p>}
             <dl>
               {selected.topic && (
@@ -396,12 +399,14 @@ export default function Sidebar({
             <button type="button" className="btn" onClick={onExportPng} disabled={!canExportPng || loading}>
               Download map image (PNG)
             </button>
-            <a
-              className="btn btn-anchor"
-              href={`https://datacommon.mapc.org/api/export?token=datacommon&database=ds&schema=tabular&table=${selected.table}&format=csv`}
-            >
-              Download full table (CSV)
-            </a>
+            {!selected.local && (
+              <a
+                className="btn btn-anchor"
+                href={`https://datacommon.mapc.org/api/export?token=datacommon&database=ds&schema=tabular&table=${selected.table}&format=csv`}
+              >
+                Download full table (CSV)
+              </a>
+            )}
             <button type="button" className="btn" onClick={() => copyText('link', window.location.href)}>
               {copied === 'link' ? 'Link copied ✓' : 'Copy link to this map'}
             </button>
