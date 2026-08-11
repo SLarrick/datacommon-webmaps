@@ -8,6 +8,13 @@ import { NO_DATA_COLOR, formatValue } from '../lib/classify'
 const BASEMAP = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 const NEUTRAL_FILL = '#c9d6d3'
 
+/** Self-contained style used when the basemap CDN is unreachable. */
+const FALLBACK_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eef1f2' } }],
+}
+
 interface HoverInfo {
   x: number
   y: number
@@ -60,70 +67,133 @@ export default function MapView({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const [mapReady, setMapReady] = useState(false)
+  // Bumped every time our sources/layers are (re)initialized — including after
+  // a watchdog style swap — so data/paint effects re-apply to the new style.
+  const [styleEpoch, setStyleEpoch] = useState(0)
+  const mapReady = styleEpoch > 0
   const [hover, setHover] = useState<HoverInfo | null>(null)
   const prevHoverRef = useRef<string | null>(null)
   const lastFitRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: BASEMAP,
-      center: [-71.06, 42.35],
-      zoom: 8.3,
-      attributionControl: { compact: true },
-      // Keeps the WebGL buffer readable for PNG export.
-      canvasContextAttributes: { preserveDrawingBuffer: true },
-    })
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
-    map.on('load', () => {
-      map.addSource('units', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-        promoteId: '__id',
+    const container = containerRef.current
+    let cancelled = false
+    let map: maplibregl.Map | null = null
+    let fallback = 0
+    const ro = new ResizeObserver(() => map?.resize())
+
+    const init = (style: maplibregl.StyleSpecification | string) => {
+      if (cancelled) return
+      map = createMap(container, style)
+      setupMap(map)
+    }
+
+    // The basemap CDN can hang indefinitely — and a hung sprite/tile blocks
+    // MapLibre's first render even when style.json itself loads. Fetch the
+    // style AND probe its sprite with timeouts; on any failure fall back to
+    // a plain background so choropleths always render.
+    const controller = new AbortController()
+    const fetchTimeout = (url: string, ms: number) => {
+      const t = window.setTimeout(() => controller.abort(), ms)
+      return fetch(url, { signal: controller.signal }).finally(() => window.clearTimeout(t))
+    }
+    ;(async () => {
+      try {
+        const res = await fetchTimeout(BASEMAP, 7000)
+        if (!res.ok) throw new Error(String(res.status))
+        const style = (await res.json()) as maplibregl.StyleSpecification
+        if (style.sprite) {
+          const probe = await fetchTimeout(`${style.sprite}.json`, 5000)
+          if (!probe.ok) throw new Error('sprite unreachable')
+        }
+        init(style)
+      } catch {
+        if (!cancelled) init(FALLBACK_STYLE)
+      }
+    })()
+
+    function createMap(el: HTMLDivElement, style: maplibregl.StyleSpecification | string) {
+      return new maplibregl.Map({
+        container: el,
+        style,
+        center: [-71.06, 42.35],
+        zoom: 8.3,
+        attributionControl: { compact: true },
+        // Keeps the WebGL buffer readable for PNG export.
+        canvasContextAttributes: { preserveDrawingBuffer: true },
       })
-      map.addLayer({
-        id: 'units-fill',
-        type: 'fill',
-        source: 'units',
-        paint: { 'fill-color': NEUTRAL_FILL, 'fill-opacity': 0.82 },
-      })
-      map.addLayer({
-        id: 'units-line',
-        type: 'line',
-        source: 'units',
-        paint: {
-          'line-color': [
-            'case',
-            ['boolean', ['feature-state', 'hover'], false],
-            '#1f3a4d',
-            '#7d8f99',
-          ],
-          'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 2.5, 0.7],
-        },
-      })
-      map.addSource('overlay', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      })
-      map.addLayer({
-        id: 'overlay-line',
-        type: 'line',
-        source: 'overlay',
-        paint: { 'line-color': '#3d4f5a', 'line-width': 1.4, 'line-opacity': 0.8 },
-      })
-      setMapReady(true)
-    })
-    mapRef.current = map
-    if (canvasRef) canvasRef.current = () => mapRef.current?.getCanvas() ?? null
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__map = map
-    // The flex layout can settle after map construction — keep canvas in sync.
-    const ro = new ResizeObserver(() => map.resize())
-    ro.observe(containerRef.current)
+    }
+
+    function setupMap(m: maplibregl.Map) {
+      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
+      const initLayers = () => {
+        if (m.getSource('units')) return
+        m.addSource('units', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+          promoteId: '__id',
+        })
+        m.addLayer({
+          id: 'units-fill',
+          type: 'fill',
+          source: 'units',
+          paint: { 'fill-color': NEUTRAL_FILL, 'fill-opacity': 0.82 },
+        })
+        m.addLayer({
+          id: 'units-line',
+          type: 'line',
+          source: 'units',
+          paint: {
+            'line-color': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              '#1f3a4d',
+              '#7d8f99',
+            ],
+            'line-width': ['case', ['boolean', ['feature-state', 'hover'], false], 2.5, 0.7],
+          },
+        })
+        m.addSource('overlay', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        })
+        m.addLayer({
+          id: 'overlay-line',
+          type: 'line',
+          source: 'overlay',
+          paint: { 'line-color': '#3d4f5a', 'line-width': 1.4, 'line-opacity': 0.8 },
+        })
+        setStyleEpoch((e) => e + 1)
+      }
+      m.on('load', initLayers)
+      // Re-initialize after any style swap (fires on setStyle).
+      m.on('style.load', initLayers)
+      // Even a reachable style can wedge mid-load on hung tile/glyph fetches,
+      // which blocks rendering of our layers too. If the map hasn't fully
+      // loaded within the deadline, swap to the self-contained fallback style.
+      fallback = window.setTimeout(() => {
+        if (!m.loaded()) {
+          try {
+            m.setStyle(FALLBACK_STYLE)
+          } catch {
+            /* ignore */
+          }
+        }
+      }, 10000)
+      mapRef.current = m
+      if (canvasRef) canvasRef.current = () => mapRef.current?.getCanvas() ?? null
+      if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__map = m
+      // The flex layout can settle after map construction — keep canvas in sync.
+      ro.observe(container)
+    }
+
     return () => {
+      cancelled = true
+      controller.abort()
+      window.clearTimeout(fallback)
       ro.disconnect()
-      map.remove()
+      map?.remove()
       mapRef.current = null
     }
   }, [])
@@ -134,14 +204,14 @@ export default function MapView({
     if (!map || !mapReady || !data) return
     const source = map.getSource('units') as maplibregl.GeoJSONSource
     source.setData(data)
-  }, [data, mapReady])
+  }, [data, styleEpoch])
 
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     const source = map.getSource('overlay') as maplibregl.GeoJSONSource
     source.setData(overlay ?? { type: 'FeatureCollection', features: [] })
-  }, [overlay, mapReady])
+  }, [overlay, styleEpoch])
 
   // Re-fit when the frame/bin extent changes.
   useEffect(() => {
@@ -162,14 +232,14 @@ export default function MapView({
       if (coords) walk(coords)
     }
     map.fitBounds(bounds, { padding: 30, animate: false })
-  }, [data, fitKey, mapReady])
+  }, [data, fitKey, styleEpoch])
 
   // Restyle fills when classification changes.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady) return
     map.setPaintProperty('units-fill', 'fill-color', fillColorExpression(classification) as never)
-  }, [classification, mapReady])
+  }, [classification, styleEpoch])
 
   // The shared hover id (map- or panel-driven) controls the outline highlight.
   useEffect(() => {
@@ -182,7 +252,7 @@ export default function MapView({
       map.setFeatureState({ source: 'units', id: hoveredId }, { hover: true })
     }
     prevHoverRef.current = hoveredId
-  }, [hoveredId, mapReady])
+  }, [hoveredId, styleEpoch])
 
   // Mouse interactions on the map itself (tooltip stays map-local).
   useEffect(() => {
@@ -213,7 +283,7 @@ export default function MapView({
       map.off('mousemove', 'units-fill', onMove)
       map.off('mouseleave', 'units-fill', onLeave)
     }
-  }, [mapReady, onHover])
+  }, [styleEpoch, onHover])
 
   const showValueRow = classification !== null
 
