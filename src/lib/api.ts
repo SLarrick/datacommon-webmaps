@@ -1,22 +1,24 @@
 import type { DataRow } from '../types'
 
-interface QueryResponse {
-  fields: Record<string, { type?: string }>
-  total_rows: number
+interface TableResponse {
+  fields: string[]
   rows: DataRow[]
+  total_rows?: number
 }
 
-/** Run a SELECT against the DataCommon API via our proxy (see api/dc.js). */
-export async function dcQuery(database: 'ds' | 'gisdata' | 'towndata', sql: string): Promise<QueryResponse> {
-  const url = `/api/dc?token=datacommon&database=${database}&query=${encodeURIComponent(sql)}`
+/**
+ * Fetch a full table through our proxy (see api/dc.js).
+ *
+ * The DataCommon API's SQL query mode was removed for security (August 2026);
+ * the parameterized replacement returns whole tables, so year filtering
+ * happens client-side and tables are cached per selection.
+ */
+export async function dcTable(table: string): Promise<TableResponse> {
+  const url = `/api/dc?token=datacommon&database=ds&schema=tabular&table=${encodeURIComponent(table)}`
   const res = await fetch(url)
   const text = await res.text()
-  if (!res.ok || text.startsWith('Unable')) {
+  if (!res.ok || /^(Token|Invalid|Unable)/.test(text)) {
     throw new Error(`DataCommon API error: ${text.slice(0, 200)}`)
   }
-  return JSON.parse(text) as QueryResponse
-}
-
-export function sqlLiteral(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
+  return JSON.parse(text) as TableResponse
 }

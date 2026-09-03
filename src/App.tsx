@@ -5,7 +5,7 @@ import Sidebar from './components/Sidebar'
 import type { FrameOption } from './components/Sidebar'
 import Legend from './components/Legend'
 import RankingPanel, { buildRankRows } from './components/RankingPanel'
-import { dcQuery, sqlLiteral } from './lib/api'
+import { dcTable } from './lib/api'
 import { classify } from './lib/classify'
 import { downloadCurrentView } from './lib/download'
 import { exportMapPng } from './lib/exportPng'
@@ -59,6 +59,7 @@ export default function App() {
   const initial = useRef(readUrlState()).current
   const embed = initial.embed
   const mapCanvasRef = useRef<(() => HTMLCanvasElement | null) | null>(null)
+  const tableCache = useRef(new Map<string, DataRow[]>())
 
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [munis, setMunis] = useState<UnitCollection | null>(null)
@@ -190,20 +191,26 @@ export default function App() {
     }
   }, [catalog])
 
-  // Fetch table rows whenever table or year changes (variable switches are free).
+  // Fetch the full table whenever the table changes; the API's parameterized
+  // mode has no year filtering, so tables are cached and years/variables are
+  // filtered client-side (making year switches instant).
   useEffect(() => {
     if (!tableEntry) {
       setRows(null)
       return
     }
+    const cached = tableCache.current.get(tableEntry.table)
+    if (cached) {
+      setRows(cached)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
-    const where =
-      tableEntry.yearCol && sel.year ? ` WHERE ${tableEntry.yearCol} = ${sqlLiteral(sel.year)}` : ''
-    dcQuery('ds', `SELECT * FROM tabular.${tableEntry.table}${where}`)
+    dcTable(tableEntry.table)
       .then((res) => {
         if (cancelled) return
+        tableCache.current.set(tableEntry.table, res.rows)
         setRows(res.rows)
         setLoading(false)
       })
@@ -216,7 +223,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [tableEntry, sel.year])
+  }, [tableEntry])
 
   const visibleUnits = useMemo(
     () => getVisibleUnits(bin, frame, vintage, { munis, subregions, tracts2010, tracts2020 }),
@@ -227,12 +234,13 @@ export default function App() {
     const m = new Map<string, DataRow>()
     if (rows && tableEntry) {
       for (const r of rows) {
+        if (tableEntry.yearCol && sel.year && String(r[tableEntry.yearCol]) !== sel.year) continue
         const id = rowJoinId(r, tableEntry, bin, vintage)
         if (id !== null) m.set(id, r)
       }
     }
     return m
-  }, [rows, tableEntry, bin, vintage])
+  }, [rows, tableEntry, sel.year, bin, vintage])
 
   const values = useMemo(() => {
     if (!rows || !sel.variable || !visibleUnits) return null
