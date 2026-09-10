@@ -18,15 +18,17 @@ npm run build      # production build (dist/)
 
 - **Catalog** — `node scripts/build-catalog.mjs` introspects the DataCommon API (table list, per-table metadata, year columns, row cardinality) and writes `public/data/catalog.json` plus an eligibility audit (`scripts/audit-report.md`). 139 of 168 municipal tables are currently eligible; the rest have subgroup breakdowns (multiple rows per municipality-year) deferred to Phase 2.
 - **Boundaries** — `public/data/mapc_munis.geojson` holds the 101 MAPC municipalities (simplified from `gisdata.mapc.mapc_municipalities_poly`, ~480 KB), including subregion attributes for Phase 2.
-- **Data fetches** — selecting a table/year runs `SELECT * FROM tabular.<table> WHERE <year_col> = '<year>'` through a proxy; switching variables requires no new fetch. Values join to polygons client-side on `muni_id`.
-- **Proxy** — the DataCommon API sends no CORS headers, so the browser can't call it directly. In dev, Vite proxies `/api/dc` (see `vite.config.ts`); in production the Vercel function `api/dc.js` does the same with CDN caching. Only single SELECT statements are forwarded.
+- **Data fetches** — selecting a table fetches the whole table once through the proxy (`?database=ds&schema=tabular&table=<t>`) and caches it client-side; year filtering happens during the join, so switching variables or years requires no new fetch. Values join to polygons client-side on the table's join key (`muni_id`, `ct10_id`, `ct20_id`).
+- **Proxy** — the DataCommon API sends no CORS headers, so the browser can't call it directly. In dev, Vite proxies `/api/dc` (see `vite.config.ts`); in production the Vercel function `api/dc.js` does the same with CDN caching. The proxy allowlists `database` and `schema` and validates `table` as a bare identifier; nothing else is forwarded.
+- **Basemap resilience** — the CARTO basemap is fetched with a timeout and a sprite probe; if the map hasn't fully loaded within 10 s it falls back to a minimal self-contained style so the choropleth always renders.
 - **Classification** — 5-class quantiles, sequential YlGnBu ramp; variables spanning negative and positive get a diverging ramp pivoted at 0. Percent-like variables are detected by name/alias and formatted as percentages. Municipalities without data render gray and are counted in the legend.
 - **URL state** — `?frame=mapc&bin=muni&table=…&var=…&year=…` fully describes a view. `frame`/`bin` are fixed in Phase 1 but included so Phase 2 links stay compatible.
 
-## DataCommon API notes (verified July 2026)
+## DataCommon API notes (updated September 2026)
 
-- Query API (arbitrary SELECT, incl. `information_schema`; note the required trailing slash):
-  `https://datacommon.mapc.org/api/?token=datacommon&database=ds|gisdata|towndata&query=<SQL>`
+- **Table-fetch API** (the mode the app uses; returns the whole table, no filtering; note the required trailing slash):
+  `https://datacommon.mapc.org/api/?token=datacommon&database=ds|gisdata|towndata&schema=<schema>&table=<t>` → `{fields, rows}`
+- **SQL query mode was removed in August 2026** (`&query=<SQL>` now returns "not authorized"). The catalog and boundary build scripts (`scripts/build-catalog.mjs` and the tract prep) were written against it and **cannot currently regenerate**; the checked-in `catalog.json` and boundary files stay valid until DataCommon adds or renames tables. See `docs/PRD.md` §8 for options.
 - Export API (user-facing downloads):
   `https://datacommon.mapc.org/api/export?token=datacommon&database=ds&schema=tabular&table=<t>&format=csv|json|geojson|shp&years=<y>`
 - `ds.metadata.<table>` holds each table's title, join key, and column aliases.

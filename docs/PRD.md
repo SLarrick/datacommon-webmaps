@@ -1,9 +1,9 @@
 # PRD: MAPC DataCommon Web Maps
 
-**Version:** 1.1
+**Version:** 1.2
 **Author:** Stephen Larrick (with Claude)
-**Date:** July 18, 2026
-**Status:** Phases 1–2 built and verified (see §9 Build log)
+**Date:** September 8, 2026 (originally July 18, 2026)
+**Status:** Phases 1–2 built and verified; migrated to DataCommon's parameterized API after the SQL endpoint was removed (see §9 Build log)
 **Source brief:** "A Choropleth Web Map for Every DataCommon Table/Variable" (internal doc, not in this repo)
 
 ---
@@ -31,12 +31,13 @@ DataCommon today presents most of its data as tables and charts only; there is n
 
 ## 2. What we verified about the DataCommon API (July 2026 spike)
 
-These findings ground the architecture and were confirmed with live API calls:
+These findings ground the architecture and were confirmed with live API calls. **Update, September 2026:** MAPC removed the SQL query mode in August 2026 for security; see the row below and §9 for what changed.
 
 | Finding | Detail | Implication |
 |---|---|---|
 | **Export API** | `GET https://datacommon.mapc.org/api/export?token=datacommon&database=ds&schema=tabular&table=<t>&format=csv\|json\|geojson\|shp&years=<y>` | Powers user-facing downloads; supports year filtering |
-| **Query API — full SQL** | `GET https://datacommon.mapc.org/api/?token=datacommon&database=<db>&query=<SQL>` returns `{fields, total_rows, rows}` | We can run arbitrary SELECTs incl. `information_schema` introspection and PostGIS functions. Server-side filtering, aggregation, and table discovery are all possible |
+| **Query API — full SQL** *(removed Aug 2026)* | `GET https://datacommon.mapc.org/api/?token=datacommon&database=<db>&query=<SQL>` returned `{fields, total_rows, rows}` | Was used for `information_schema` introspection, PostGIS boundary export, and year-filtered data fetches. **No longer available.** The catalog and boundary build scripts still assume it and cannot currently regenerate (§8) |
+| **Table-fetch API — parameterized** *(current)* | `GET https://datacommon.mapc.org/api/?token=datacommon&database=<db>&schema=<schema>&table=<t>` returns `{fields, rows}` for the **whole table** | No server-side filtering. The app fetches a full table once per selection, caches it client-side, and filters by year during the join. Year switching is instant as a side effect |
 | **Three databases** | `ds` (tabular data + metadata), `gisdata` (spatial), `towndata` | Boundaries and data come from the same API |
 | **Per-table metadata** | `ds` has a `metadata` schema with one metadata table per data table, containing rows like `join_key` (e.g. `muni_id`), `title`, `alt_title`, plus column name/alias/description entries | We can build a human-readable table catalog and variable picker, and know each table's geographic join key, without hand-curation |
 | **Geography naming convention** | Table suffixes encode geography: `_m` (municipal), `_ct` (census tract), `_bg` (block group) | Cheap first-pass classification of tables by bin level. **168 tables** in `tabular` end in `_m` |
@@ -159,7 +160,7 @@ A collapsible panel overlaying the right side of the map, toggled by a button, l
 ### 6.1 Stack
 
 - **Framework:** React + Vite SPA (matches MAPC precedent — homesforprofit.mapc.org is a Vite React SPA), deployed on **Vercel**.
-- **Serverless proxy:** Vercel serverless functions (`/api/*`) that forward requests to the DataCommon API. **Required** because the DataCommon API sends no CORS headers (verified). The proxy is a thin pass-through with an allowlist (only `datacommon.mapc.org` endpoints, only SELECT queries) and response caching headers.
+- **Serverless proxy:** Vercel serverless functions (`/api/*`) that forward requests to the DataCommon API. **Required** because the DataCommon API sends no CORS headers (verified). The proxy is a thin pass-through with an allowlist and response caching headers. *(Originally: only SELECT queries. Since September 2026: validates `database` and `schema` against allowlists and `table` against a bare-identifier pattern, forwarding only the parameterized table-fetch mode.)*
 - **Mapping:** **MapLibre GL JS** (open-source, no token, vector rendering, smooth at Phase 2+ scales where Leaflet + raw GeoJSON would struggle; consistent with modern MAPC/Vercel map tools like the OSM Explorer).
 - **State:** URL query params as source of truth; React state hydrated from/synced to URL. No global state library needed at this size.
 - **Styling:** lightweight (CSS modules or Tailwind), loose MAPC visual inspiration (typography/colors), prototype-neutral where the style guide doesn't cover map UI.
@@ -168,7 +169,7 @@ A collapsible panel overlaying the right side of the map, toggled by a button, l
 
 1. **Build-time (or cached at runtime) catalog:** a script queries `information_schema` + the `metadata` schema to produce `catalog.json`: for each `_m` table — table name, human title, join key, numeric columns with aliases, detected year column, available years, eligibility flag. Checked into the repo; regenerable with one command. This *is* the "table eligibility audit" — its summary output (X of 168 municipal tables eligible, with reasons for exclusions) is a deliverable.
 2. **Boundaries:** MAPC municipal polygons fetched once from `gisdata` via the Query API using `ST_AsGeoJSON(ST_Simplify(...))` selecting only `muni_id`, `municipal`, geometry — then cached as a static file in the repo (boundaries change ~never). Source of truth remains the API; ArcGIS Hub layers are fallback only.
-3. **Runtime data fetch:** on table/year selection, proxy a Query API call: `SELECT <join_key>, <numeric cols> FROM tabular.<table> WHERE <year_col> = <year>` → join client-side to polygons by `muni_id` → restyle fill layer. Variable switching within a loaded table/year requires **no new fetch**.
+3. **Runtime data fetch:** on table/year selection, proxy a Query API call: `SELECT <join_key>, <numeric cols> FROM tabular.<table> WHERE <year_col> = <year>` → join client-side to polygons by `muni_id` → restyle fill layer. Variable switching within a loaded table/year requires **no new fetch**. *(Since September 2026: the proxy fetches the whole table via the parameterized mode, caches it per table, and the year filter is applied during the join. Variable **and year** switching require no new fetch.)*
 4. **Download:** client generates the GeoJSON in-browser from the already-joined data (polygons + all table columns for the selected year) — no extra API load, exactly matches what's on screen.
 
 ### 6.3 Performance guardrails (Phase 1 + forward-looking)
@@ -205,7 +206,8 @@ Suggested sequencing note: milestones 1 and 2 are independent and can proceed in
 |---|---|---|
 | Year columns are inconsistently named across tables (`cal_year`, `acs_year`, `fy`, year ranges like `2019-23`) | High · Medium | Catalog script detects year-like columns per table via name patterns + value inspection; tables where detection fails are marked ineligible for Phase 1 (counted in audit) rather than mis-mapped |
 | Some `_m` tables have multiple rows per muni per year (subgroup breakdowns) | Medium · High | Catalog script checks row cardinality per muni-year; such tables are Phase 1-ineligible (honest exclusion) — generic dimension filters are a Phase 2+ feature |
-| API stability/rate limits are undocumented; proxy adds a dependency on token `datacommon` remaining public | Medium · Medium | Aggressive CDN caching; graceful error states; this is a prototype for colleagues, not production infrastructure |
+| API stability/rate limits are undocumented; proxy adds a dependency on token `datacommon` remaining public | Medium · Medium | Aggressive CDN caching; graceful error states; this is a prototype for colleagues, not production infrastructure. **Materialized Aug 2026:** the SQL query mode was removed; runtime migrated in one commit (§9) thanks to the thin proxy |
+| **Catalog and boundaries can no longer be regenerated** — `build-catalog.mjs` and the boundary prep depend on `information_schema`/`metadata` introspection and PostGIS export, which only the removed SQL mode offered | High · Medium (new, Sept 2026) | The checked-in `catalog.json` and boundary files remain valid until DataCommon adds or renames tables. Options: ask MAPC for a metadata/table-list affordance on the new API; rebuild the catalog from the Export API's CSV headers plus the `_data_browser` table (fetchable via the parameterized mode); or hand-maintain catalog diffs |
 | Metadata schema coverage may be incomplete for some tables | Medium · Low | Fallbacks: raw column names as labels; table name as title |
 | MAPC 101-muni boundary set vs. 351 statewide munis — confirm `gisdata.mapc.mapc_municipalities_poly` (or filter `ma_municipalities` by MAPC membership) is the right Phase 1 layer | Low · Low | Verify during milestone 2; both exist in `gisdata` |
 | Scope creep toward DataCommon-replacement | Medium · Medium | Phase gates in this PRD; Phase 1 ships before any Phase 2 work starts |
@@ -240,6 +242,12 @@ Phase 1 was implemented and verified in one session. Code: `datacommon-webmaps/`
 
 **"Share & Show" slice — July 18, 2026.** Portability before depth, so demos turn into other people's demos: embed mode (`?embed=1`, chromeless map + legend + credit chip; "Copy embed code" produces the iframe snippet), PNG export (map + title band + legend + attribution composited into a report-ready image), a per-dataset **"View on DataCommon"** deep link (via `_data_browser.seq_id` — the adoption bridge from §8's open question, now closed), and whole-table CSV download via the Export API. Explicitly deferred until colleague feedback steers Phase 3: table preview panel, block-group bins, year comparison, county/RPA geographies.
 
+**Branding — July 18, 2026.** Product mark (favicon and header), MAPC and DataCommon logos in the sidebar footer, and a GitHub link to the repo.
+
+**Basemap resilience — August 11, 2026.** The CARTO CDN was observed hanging indefinitely on style, sprite, and glyph fetches, which blocked MapLibre's first render entirely, including the app's own GeoJSON layers. The style is now fetched with a timeout and its sprite probed before use; if the map still hasn't fully loaded within 10 seconds, it swaps to a minimal self-contained style so the choropleth always renders. Layers re-initialize on every style load via an epoch counter.
+
+**API migration — September 3, 2026.** MAPC removed the DataCommon API's SQL query mode in August 2026 for security. The runtime now uses the parameterized table-fetch mode (`?database&schema&table` → `{fields, rows}`), which returns whole tables with no year filtering. Tables are cached client-side per selection and year filtering moved into the join, which makes year switching instant. The proxy validates database/schema allowlists and table-name shape instead of inspecting SQL. Net change: three files, no UI impact, verified across municipal, subregion, and tract bins. **Known limitation:** the catalog and boundary build scripts still assume the SQL endpoint and cannot regenerate until a replacement affordance exists (§8).
+
 **Deviations and decisions made during the build:**
 
 - **Cartographic honesty fixes found in testing:** numeric ID columns (Census GEOIDs) initially leaked into variable pickers — now excluded by the catalog script; diverging ramps initially used raw quantile breaks (a town growing +4% could render red) — the diverging ramp now pivots at 0, warm classes strictly negative.
@@ -248,6 +256,19 @@ Phase 1 was implemented and verified in one session. Code: `datacommon-webmaps/`
 - Environment note: Vite 8's rolldown bundler hit a known npm optional-dependency bug on this machine; `@rolldown/binding-darwin-arm64` was manually extracted into `node_modules`.
 
 ## 10. Appendix: verified API call patterns
+
+**Current (September 2026) — parameterized table fetch, the only query-style mode still available:**
+
+```text
+# Whole table (no filtering; the app caches and filters client-side)
+https://datacommon.mapc.org/api/?token=datacommon&database=ds&schema=tabular&table=hous_building_permits_m
+  → {fields: [...], rows: [...]}
+
+# Topic/menu registry used to group the dataset picker
+... &database=ds&schema=tabular&table=_data_browser
+```
+
+**Historical (July 2026) — SQL query mode, removed August 2026.** Kept for reference because the catalog and boundary build scripts were written against it:
 
 ```text
 # List tables
